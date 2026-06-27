@@ -124,6 +124,48 @@
   .trend-svg{display:block;width:100%;height:118px;margin-top:4px}
   .trend-axis{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--ink-faint);margin-top:2px}
 
+  /* ---- heatmap calendar ---- */
+  .hm-card{padding:16px 18px;position:relative}
+  .hm-head{display:flex;align-items:baseline;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+  .hm-sub{font-family:var(--mono);font-size:11px;color:var(--ink-faint)}
+  .hm-scroll{overflow-x:auto;padding-bottom:4px}
+  .hm-grid{display:inline-block;min-width:max-content}
+  .hm-months{display:grid;grid-auto-flow:column;grid-template-columns:repeat(54,11px);gap:3px;margin-left:26px;height:14px;margin-bottom:2px}
+  .hm-month{font-family:var(--mono);font-size:10px;color:var(--ink-faint);grid-row:1}
+  .hm-body{display:flex;gap:3px}
+  .hm-days{display:flex;flex-direction:column;gap:3px;margin-right:5px;width:21px;flex-shrink:0}
+  .hm-day{height:11px;font-family:var(--mono);font-size:9px;color:var(--ink-faint);line-height:11px;text-align:right}
+  .hm-week{display:flex;flex-direction:column;gap:3px}
+  .hm-cell{width:11px;height:11px;border-radius:2.5px;background:var(--panel-2)}
+  .hm-cell.empty{background:transparent}
+  .hm-cell.lv0{background:#1f2530}
+  .hm-cell.lv1{background:rgba(245,166,35,.30)}
+  .hm-cell.lv2{background:rgba(245,166,35,.52)}
+  .hm-cell.lv3{background:rgba(245,166,35,.76)}
+  .hm-cell.lv4{background:var(--amber)}
+  .hm-cell:not(.empty){cursor:pointer}
+  .hm-cell:not(.empty):hover{outline:1.5px solid var(--ink);outline-offset:1px}
+  .hm-legend{display:flex;align-items:center;gap:4px;justify-content:flex-end;margin-top:10px;font-family:var(--mono);font-size:10px;color:var(--ink-faint)}
+  .hm-legend .hm-cell{cursor:default}
+  .hm-tip{position:fixed;transform:translate(-50%,-100%);background:var(--panel-2);border:1px solid var(--line);border-radius:7px;padding:6px 10px;font-size:11.5px;white-space:nowrap;z-index:80;pointer-events:none;box-shadow:0 6px 20px rgba(0,0,0,.4)}
+
+  /* ---- ratio chart headers (shared) ---- */
+  .cb-head{display:flex;align-items:baseline;gap:12px;margin-bottom:8px;flex-wrap:wrap}
+  .cb-sub{font-family:var(--mono);font-size:11px;color:var(--ink-faint)}
+
+  /* ---- impact ratio ---- */
+  .ir-bar{display:flex;height:26px;border-radius:7px;overflow:hidden;background:var(--panel-2);margin-bottom:14px}
+  .ir-seg{height:100%;transition:width .4s}
+  .ir-seg:not(:last-child){border-right:1px solid var(--bg)}
+  .ir-rows{display:flex;flex-direction:column;gap:2px}
+  .ir-row{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--line)}
+  .ir-row:last-child{border-bottom:none}
+  .ir-row.zero{opacity:.45}
+  .ir-dot{width:11px;height:11px;border-radius:3px;flex-shrink:0}
+  .ir-name{flex:1;font-size:13.5px}
+  .ir-pct{font-family:var(--mono);font-size:13px;font-weight:600;width:42px;text-align:right}
+  .ir-n{font-family:var(--mono);font-size:11px;color:var(--ink-faint);width:28px;text-align:right}
+
   /* ---- modal / editor ---- */
   .scrim{position:fixed;inset:0;background:rgba(6,7,10,.6);backdrop-filter:blur(3px);z-index:50;display:flex;justify-content:flex-end}
   .scrim.center{justify-content:center;align-items:center;padding:20px}
@@ -945,6 +987,245 @@ function Analytics({entries,period,setPeriod}){
       stat('Starred',entries.filter(e=>e.star).length),
       stat('Days tracked',spanAll),
     ),
+
+    h(Heatmap,{entries}),
+
+    h(CompetencyRatio,{entries,cutoff,periodLabel}),
+    h(CategoryRatio,{entries,cutoff,periodLabel}),
+    h(ImpactRatio,{entries,cutoff,periodLabel}),
+  );
+}
+
+
+/* ---------------- COMPETENCY RATIO ----------------
+   Share of competency tags within the period. Entries can carry several
+   competencies, so the denominator is total tag occurrences (sums to 100%).
+   ---------------------------------------------------------------- */
+function CompetencyRatio({entries,cutoff,periodLabel}){
+  const {competencies} = useConfig();
+  const model = useMemo(()=>{
+    const scoped = entries.filter(e=>e.date>=cutoff);
+    const counts = {}; Object.keys(competencies).forEach(c=>counts[c]=0);
+    let tags=0;
+    scoped.forEach(e=>e.comps.forEach(c=>{ if(counts[c]==null) counts[c]=0; counts[c]++; tags++; }));
+    return { counts, total:tags, entryCount:scoped.length };
+  },[entries,cutoff,competencies]);
+
+  const keys = Object.keys(model.counts).sort((a,b)=>model.counts[b]-model.counts[a]);
+  const colorOf = c => competencies[c]?.c || '#888';
+
+  return h('div',{className:'card',style:{marginTop:14}},
+    h('div',{className:'cb-head'},
+      h('h4',{className:'sec',style:{margin:0}},'Competency ratio'),
+      h('span',{className:'cb-sub'}, model.total+' tags · '+periodLabel.toLowerCase())),
+    model.total===0
+      ? h('p',{className:'muted',style:{fontSize:13,margin:'8px 0 0'}},'No tagged competencies in this period yet.')
+      : h('div',null,
+          h('div',{className:'ir-bar'},
+            ...keys.filter(k=>model.counts[k]>0).map(k=>{
+              const pct = model.counts[k]/model.total*100;
+              return h('div',{key:k,className:'ir-seg',
+                style:{width:pct+'%',background:colorOf(k)},
+                title:k+': '+model.counts[k]+' ('+pct.toFixed(0)+'%)'});
+            })),
+          h('div',{className:'ir-rows'},
+            ...keys.map(k=>{
+              const pct = model.total? model.counts[k]/model.total*100 : 0;
+              return h('div',{key:k,className:'ir-row'+(model.counts[k]===0?' zero':'')},
+                h('span',{className:'ir-dot',style:{background:colorOf(k)}}),
+                h('span',{className:'ir-name'},k),
+                h('span',{className:'ir-pct'},pct.toFixed(0)+'%'),
+                h('span',{className:'ir-n'},model.counts[k]));
+            }))
+        )
+  );
+}
+
+/* ---------------- CATEGORY RATIO ----------------
+   Share of entries by category within the period (single-select, sums to 100%).
+   ---------------------------------------------------------------- */
+function CategoryRatio({entries,cutoff,periodLabel}){
+  const {categories} = useConfig();
+  const CAT_COLORS = ['#5aa7ff','#4ec98a','#f5a623','#ff7a93','#b78bff','#46c4d6','#ffa766','#9d7bff','#5fd0a8','#ff9f6b'];
+
+  const model = useMemo(()=>{
+    const scoped = entries.filter(e=>e.date>=cutoff);
+    const counts = {}; categories.forEach(c=>counts[c]=0);
+    scoped.forEach(e=>{ if(counts[e.category]==null) counts[e.category]=0; counts[e.category]++; });
+    return { counts, total:scoped.length };
+  },[entries,cutoff,categories]);
+
+  const keys = Object.keys(model.counts).sort((a,b)=>model.counts[b]-model.counts[a]);
+  const colorOf = c => CAT_COLORS[categories.indexOf(c) % CAT_COLORS.length] || '#888';
+
+  return h('div',{className:'card',style:{marginTop:14}},
+    h('div',{className:'cb-head'},
+      h('h4',{className:'sec',style:{margin:0}},'Category ratio'),
+      h('span',{className:'cb-sub'}, model.total+' entries · '+periodLabel.toLowerCase())),
+    model.total===0
+      ? h('p',{className:'muted',style:{fontSize:13,margin:'8px 0 0'}},'No entries in this period yet.')
+      : h('div',null,
+          h('div',{className:'ir-bar'},
+            ...keys.filter(k=>model.counts[k]>0).map(k=>{
+              const pct = model.counts[k]/model.total*100;
+              return h('div',{key:k,className:'ir-seg',
+                style:{width:pct+'%',background:colorOf(k)},
+                title:k+': '+model.counts[k]+' ('+pct.toFixed(0)+'%)'});
+            })),
+          h('div',{className:'ir-rows'},
+            ...keys.map(k=>{
+              const pct = model.total? model.counts[k]/model.total*100 : 0;
+              return h('div',{key:k,className:'ir-row'+(model.counts[k]===0?' zero':'')},
+                h('span',{className:'ir-dot',style:{background:colorOf(k)}}),
+                h('span',{className:'ir-name'},k),
+                h('span',{className:'ir-pct'},pct.toFixed(0)+'%'),
+                h('span',{className:'ir-n'},model.counts[k]));
+            }))
+        )
+  );
+}
+
+/* ---------------- IMPACT-SCOPE RATIO ----------------
+   100% stacked bar of entries by impact scope within the period. A rising
+   share of broader scope (Org/Company) is a promotion signal.
+   ---------------------------------------------------------------- */
+function ImpactRatio({entries,cutoff,periodLabel}){
+  const {impacts} = useConfig();
+  const SCOPE_COLORS = ['#5aa7ff','#4ec98a','#f5a623','#ff7a93','#b78bff','#46c4d6','#ffa766'];
+
+  const model = useMemo(()=>{
+    const scoped = entries.filter(e=>e.date>=cutoff);
+    const counts = {}; impacts.forEach(i=>counts[i]=0);
+    scoped.forEach(e=>{ if(counts[e.impact]==null) counts[e.impact]=0; counts[e.impact]++; });
+    const total = scoped.length;
+    return { counts, total };
+  },[entries,cutoff,impacts]);
+
+  const keys = Object.keys(model.counts);
+  const colorOf = i => SCOPE_COLORS[impacts.indexOf(i) % SCOPE_COLORS.length] || '#888';
+
+  return h('div',{className:'card',style:{marginTop:14}},
+    h('div',{className:'cb-head'},
+      h('h4',{className:'sec',style:{margin:0}},'Impact-scope ratio'),
+      h('span',{className:'cb-sub'}, model.total+' entries · '+periodLabel.toLowerCase())),
+    model.total===0
+      ? h('p',{className:'muted',style:{fontSize:13,margin:'8px 0 0'}},'No entries in this period yet.')
+      : h('div',null,
+          h('div',{className:'ir-bar'},
+            ...keys.filter(k=>model.counts[k]>0).map(k=>{
+              const pct = model.counts[k]/model.total*100;
+              return h('div',{key:k,className:'ir-seg',
+                style:{width:pct+'%',background:colorOf(k)},
+                title:k+': '+model.counts[k]+' ('+pct.toFixed(0)+'%)'});
+            })),
+          h('div',{className:'ir-rows'},
+            ...keys.map(k=>{
+              const pct = model.total? model.counts[k]/model.total*100 : 0;
+              return h('div',{key:k,className:'ir-row'+(model.counts[k]===0?' zero':'')},
+                h('span',{className:'ir-dot',style:{background:colorOf(k)}}),
+                h('span',{className:'ir-name'},k),
+                h('span',{className:'ir-pct'},pct.toFixed(0)+'%'),
+                h('span',{className:'ir-n'},model.counts[k]));
+            }))
+        )
+  );
+}
+
+/* ---------------- HEATMAP CALENDAR ----------------
+   GitHub-style contribution grid: trailing 53 weeks of daily entry counts.
+   Columns = weeks, rows = days (Sun..Sat). Always shows the full year so the
+   overall rhythm and any dry spells are visible at a glance.
+   ---------------------------------------------------------------- */
+function Heatmap({entries}){
+  const [hover,setHover] = useState(null); // {x,y,date,count}
+  const model = useMemo(()=>{
+    // counts per ISO date
+    const counts = {};
+    entries.forEach(e=>{ counts[e.date]=(counts[e.date]||0)+1; });
+    // end = today; start = the Sunday on/before (today - 52 weeks)
+    const end = new Date(today()+'T00:00');
+    const start = new Date(end);
+    start.setDate(start.getDate() - 7*52);
+    start.setDate(start.getDate() - start.getDay()); // back up to Sunday
+    const dayMs = 864e5;
+    const weeks = [];
+    let cur = new Date(start);
+    let max = 0, total = 0, active = 0;
+    while(cur <= end){
+      const col = [];
+      for(let d=0; d<7; d++){
+        if(cur > end){ col.push(null); }
+        else {
+          const ds = iso(cur);
+          const n = counts[ds] || 0;
+          if(n>0){ active++; total+=n; }
+          if(n>max) max=n;
+          col.push({ date:ds, n });
+        }
+        cur = new Date(cur.getTime()+dayMs);
+      }
+      weeks.push(col);
+    }
+    return { weeks, max, total, active, start:iso(start), end:iso(end) };
+  },[entries]);
+
+  // bucket a count into 0..4 for shading
+  const level = n => {
+    if(!n) return 0;
+    if(model.max<=1) return 4;
+    const r = n/model.max;
+    if(r<=0.25) return 1;
+    if(r<=0.5) return 2;
+    if(r<=0.75) return 3;
+    return 4;
+  };
+
+  // month labels: place a label above the first week whose first day starts a new month
+  const monthLabels = model.weeks.map((col,wi)=>{
+    const first = col.find(c=>c);
+    if(!first) return null;
+    const d = new Date(first.date+'T00:00');
+    const prev = wi>0 ? model.weeks[wi-1].find(c=>c) : null;
+    const prevMonth = prev ? new Date(prev.date+'T00:00').getMonth() : -1;
+    return d.getMonth()!==prevMonth ? {wi, label:d.toLocaleDateString('en-US',{month:'short'})} : null;
+  }).filter(Boolean);
+
+  const DAYS = ['','Mon','','Wed','','Fri',''];
+
+  return h('div',{className:'card hm-card',style:{marginTop:14}},
+    h('div',{className:'hm-head'},
+      h('h4',{className:'sec',style:{margin:0}},'Activity calendar'),
+      h('div',{className:'hm-sub'}, model.total+' entries on '+model.active+' days · past year')),
+    h('div',{className:'hm-scroll'},
+      h('div',{className:'hm-grid'},
+        // month label row
+        h('div',{className:'hm-months'},
+          ...monthLabels.map(m=>h('span',{key:m.wi,className:'hm-month',
+            style:{gridColumnStart:m.wi+1}},m.label))),
+        // weekday gutter + week columns
+        h('div',{className:'hm-body'},
+          h('div',{className:'hm-days'},
+            ...DAYS.map((d,i)=>h('span',{key:i,className:'hm-day'},d))),
+          ...model.weeks.map((col,wi)=>h('div',{className:'hm-week',key:wi},
+            ...col.map((cell,di)=> cell
+              ? h('div',{key:di,
+                  className:'hm-cell lv'+level(cell.n),
+                  onMouseEnter:e=>{ const r=e.target.getBoundingClientRect();
+                    setHover({date:cell.date,count:cell.n,x:r.left+r.width/2,y:r.top}); },
+                  onMouseLeave:()=>setHover(null)})
+              : h('div',{key:di,className:'hm-cell empty'})))))),
+    ),
+    h('div',{className:'hm-legend'},
+      h('span',null,'Less'),
+      h('span',{className:'hm-cell lv0'}),
+      h('span',{className:'hm-cell lv1'}),
+      h('span',{className:'hm-cell lv2'}),
+      h('span',{className:'hm-cell lv3'}),
+      h('span',{className:'hm-cell lv4'}),
+      h('span',null,'More')),
+    hover && h('div',{className:'hm-tip',style:{left:hover.x,top:hover.y-10}},
+      h('b',null, hover.count===0 ? 'No entries' : hover.count+(hover.count===1?' entry':' entries')),
+      ' · '+new Date(hover.date+'T00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}))
   );
 }
 
