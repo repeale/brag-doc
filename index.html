@@ -442,7 +442,13 @@ const SEED = () => ({
 /* ============================ APP ============================ */
 function App(){
   const [state,setState] = useState(null);
-  const [view,setView] = useState('journal');
+  const VIEWS = ['journal','analytics','impact','review','settings'];
+  const viewFromHash = () => {
+    const h = (window.location.hash||'').replace(/^#\/?/,'');
+    return VIEWS.includes(h) ? h : 'journal';
+  };
+  const [view,setViewRaw] = useState(viewFromHash);
+  const setView = v => { window.location.hash = v; setViewRaw(v); };
   const [editing,setEditing] = useState(null); // entry obj or 'new'
   const [q,setQ] = useState('');
   const [fCat,setFCat] = useState(null);
@@ -479,6 +485,15 @@ function App(){
     const onKey = e=>{ if(e.key==='Escape'){ setEditing(null); setRailOpen(false); setImporting(null); } };
     window.addEventListener('keydown',onKey);
     return ()=>window.removeEventListener('keydown',onKey);
+  },[]);
+
+  // Sync the URL fragment -> view (handles refresh, back/forward, manual edits)
+  useEffect(()=>{
+    const onHash = ()=> setViewRaw(viewFromHash());
+    window.addEventListener('hashchange',onHash);
+    // normalise the bar/hash on first load so refresh lands on the right page
+    if(!window.location.hash) { /* leave bare; default journal */ }
+    return ()=>window.removeEventListener('hashchange',onHash);
   },[]);
 
   const flash = m => { setToast(m); setTimeout(()=>setToast(null),1900); };
