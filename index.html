@@ -152,6 +152,19 @@
   /* ---- ratio chart headers (shared) ---- */
   .cb-head{display:flex;align-items:baseline;gap:12px;margin-bottom:8px;flex-wrap:wrap}
   .cb-sub{font-family:var(--mono);font-size:11px;color:var(--ink-faint)}
+  .cb-svg{display:block;width:100%;height:170px}
+  .cb-axis{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--ink-faint);margin-top:2px;padding:0 10px 0 30px}
+  .cb-legend{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+  .cb-leg{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-family:var(--mono);color:var(--ink-dim);padding:4px 9px;border:1px solid var(--line);border-radius:7px;transition:.12s}
+  .cb-leg:hover{border-color:var(--ink-faint);color:var(--ink)}
+  .cb-leg.off{opacity:.4;text-decoration:line-through}
+  .cb-swatch{width:10px;height:10px;border-radius:3px;flex-shrink:0}
+  .cb-tip{position:absolute;top:8px;transform:translateX(-50%);background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:11.5px;z-index:20;pointer-events:none;box-shadow:0 6px 20px rgba(0,0,0,.4);min-width:120px}
+  .cb-tip-date{font-family:var(--mono);font-size:10px;color:var(--ink-faint);margin-bottom:5px}
+  .cb-tip-carry{color:var(--amber)}
+  .cb-tip-row{display:flex;align-items:center;gap:7px;padding:1px 0}
+  .cb-tip-name{flex:1;white-space:nowrap}
+  .cb-tip-val{font-family:var(--mono);font-weight:600}
 
   /* ---- impact ratio ---- */
   .ir-bar{display:flex;height:26px;border-radius:7px;overflow:hidden;background:var(--panel-2);margin-bottom:14px}
@@ -373,6 +386,8 @@ const DEFAULT_COMPETENCIES = {
 const DEFAULT_CATEGORIES = ['Shipped','Project','Mentoring','Process','Incident','Learning','Recognition','Collaboration'];
 const DEFAULT_IMPACTS = ['Team','Multi-team','Org','Company'];
 const PALETTE = ['#5aa7ff','#4ec98a','#f5a623','#b78bff','#ff7a93','#46c4d6','#ffa766','#9d7bff','#5fd0a8','#ff9f6b'];
+const CAT_PALETTE = ['#5aa7ff','#4ec98a','#f5a623','#ff7a93','#b78bff','#46c4d6','#ffa766','#9d7bff','#5fd0a8','#ff9f6b'];
+const SCOPE_PALETTE = ['#5aa7ff','#4ec98a','#f5a623','#ff7a93','#b78bff','#46c4d6','#ffa766'];
 
 const ConfigContext = React.createContext({
   competencies: DEFAULT_COMPETENCIES,
@@ -1020,6 +1035,137 @@ function Analytics({entries,period,setPeriod}){
    Share of competency tags within the period. Entries can carry several
    competencies, so the denominator is total tag occurrences (sums to 100%).
    ---------------------------------------------------------------- */
+/* ---------------- SHARE TREND OVER TIME ----------------
+   100% stacked-area chart of how a dimension's share drifts across the
+   selected period. Reused for competencies, categories, and impact scope.
+   - keysOf(entry): array of keys the entry contributes (multi for competencies)
+   - colorOf(key), allKeys: universe for ordering + colour
+   Empty buckets carry forward the previous split; leading empties stay blank.
+   ---------------------------------------------------------------- */
+function ShareTrend({title,entries,cutoff,periodLabel,allKeys,keysOf,colorOf}){
+  const [hidden,setHidden] = useState({});
+  const [hoverIdx,setHoverIdx] = useState(null);
+
+  const model = useMemo(()=>{
+    const end = new Date(today()+'T00:00');
+    let start;
+    if(cutoff==='0000-01-01'){
+      const earliest = entries.reduce((a,e)=>e.date<a?e.date:a, today());
+      start = new Date((entries.length?earliest:weekAgo(30))+'T00:00');
+    } else {
+      start = new Date(cutoff+'T00:00');
+    }
+    const dayMs = 864e5;
+    const totalDays = Math.max(1, Math.round((end-start)/dayMs));
+    const BUCKETS = Math.min(12, Math.max(4, Math.ceil(totalDays/14)));
+    const bucketDays = totalDays/BUCKETS;
+    const series = {}; allKeys.forEach(k=>series[k]=new Array(BUCKETS).fill(0));
+    const inWindow = entries.filter(e=>e.date>=iso(start) && e.date<=iso(end));
+    inWindow.forEach(e=>{
+      const d = new Date(e.date+'T00:00');
+      let bi = Math.floor((d-start)/dayMs/bucketDays);
+      if(bi<0) bi=0; if(bi>=BUCKETS) bi=BUCKETS-1;
+      keysOf(e).forEach(k=>{ if(series[k]==null) series[k]=new Array(BUCKETS).fill(0); series[k][bi]++; });
+    });
+    const labels = [];
+    for(let i=0;i<BUCKETS;i++) labels.push(iso(new Date(start.getTime()+i*bucketDays*dayMs)));
+    return { series, labels, BUCKETS, bucketDays };
+  },[entries,cutoff,allKeys.join(',')]);
+
+  // keys that appear, ordered by total volume (biggest first)
+  const ordered = useMemo(()=>allKeys
+    .map(k=>({k,total:(model.series[k]||[]).reduce((a,b)=>a+b,0)}))
+    .filter(o=>o.total>0).sort((a,b)=>b.total-a.total).map(o=>o.k),
+  [model,allKeys.join(',')]);
+  const visible = ordered.filter(k=>!hidden[k]);
+  const anyData = ordered.length>0;
+
+  // Denominator is the FULL total (all items), so toggling items off in the
+  // legend lowers the remaining shares rather than re-filling to 100%.
+  const fullTotals = model.labels.map((_,i)=>ordered.reduce((s,k)=>s+(model.series[k]?.[i]||0),0));
+
+  // normalised share matrix with carry-forward; null for leading-empty buckets.
+  // Shares are computed against the full total; only visible bands are drawn.
+  const {shares,carried} = useMemo(()=>{
+    const shares = new Array(model.BUCKETS).fill(null);
+    const carried = new Array(model.BUCKETS).fill(false);
+    let prev=null;
+    for(let i=0;i<model.BUCKETS;i++){
+      const total=fullTotals[i];
+      if(total>0){ const m={}; visible.forEach(k=>m[k]=(model.series[k]?.[i]||0)/total); shares[i]=m; prev=m; }
+      else if(prev){ shares[i]=prev; carried[i]=true; }
+    }
+    return {shares,carried};
+  },[model,visible.join(','),fullTotals.join(',')]);
+
+  const firstFilled = shares.findIndex(s=>s!=null);
+
+  const W=600,H=170,PADL=30,PADR=10,PADT=10,PADB=8;
+  const px = i => PADL + (model.BUCKETS<=1?0:i/(model.BUCKETS-1))*(W-PADL-PADR);
+  const yTop = (H-PADB)-(H-PADT-PADB);
+  const py = frac => (H-PADB) - frac*(H-PADT-PADB);
+
+  const lower = new Array(model.BUCKETS).fill(0);
+  const bands = (anyData && firstFilled>=0) ? visible.map(k=>{
+    const idx=[]; for(let i=firstFilled;i<model.BUCKETS;i++) idx.push(i);
+    const upper = lower.map((lo,i)=> lo + (shares[i]?.[k]||0));
+    const top = idx.map(i=>px(i).toFixed(1)+' '+py(upper[i]).toFixed(1));
+    const bot = idx.map(i=>px(i).toFixed(1)+' '+py(lower[i]).toFixed(1)).reverse();
+    const d = 'M'+top.join(' L')+' L'+bot.join(' L')+' Z';
+    for(let i=0;i<lower.length;i++) lower[i]=upper[i];
+    return { k, d };
+  }) : [];
+
+  const ticks = [0,0.5,1].map(f=>({f,label:Math.round(f*100)+'%'}));
+
+  function onMove(ev){
+    const r = ev.currentTarget.getBoundingClientRect();
+    const xRel = (ev.clientX-r.left)/r.width*W;
+    let i = Math.round((xRel-PADL)/((W-PADL-PADR)/Math.max(1,model.BUCKETS-1)));
+    if(i<0)i=0; if(i>model.BUCKETS-1)i=model.BUCKETS-1;
+    setHoverIdx(i);
+  }
+  const hoverShare = hoverIdx!=null ? shares[hoverIdx] : null;
+
+  return h('div',{className:'card',style:{marginTop:14}},
+    h('div',{className:'cb-head'},
+      h('h4',{className:'sec',style:{margin:0}},title),
+      h('span',{className:'cb-sub'}, 'share drift · '+periodLabel.toLowerCase())),
+    !anyData
+      ? h('p',{className:'muted',style:{fontSize:13,margin:'8px 0 0'}},'No data in this period yet.')
+      : h('div',{style:{position:'relative'}},
+          h('svg',{className:'cb-svg',style:{height:'170px'},viewBox:'0 0 '+W+' '+H,preserveAspectRatio:'none',role:'img',
+            'aria-label':title+' share over time',
+            onMouseMove:onMove,onMouseLeave:()=>setHoverIdx(null)},
+            ...ticks.map(t=>h('g',{key:t.label},
+              h('line',{x1:PADL,y1:py(t.f),x2:W-PADR,y2:py(t.f),stroke:'var(--line)',strokeWidth:'1',vectorEffect:'non-scaling-stroke'}),
+              h('text',{x:PADL-5,y:py(t.f)+3,fill:'var(--ink-faint)',fontSize:'9',textAnchor:'end',fontFamily:'monospace'},t.label))),
+            ...bands.map(b=>h('path',{key:b.k,d:b.d,
+              fill:colorOf(b.k),fillOpacity:0.85,
+              stroke:colorOf(b.k),strokeWidth:'1',vectorEffect:'non-scaling-stroke'})),
+            hoverIdx!=null && hoverShare && h('line',{x1:px(hoverIdx),y1:yTop,x2:px(hoverIdx),y2:H-PADB,
+              stroke:'var(--ink)',strokeWidth:'1',strokeDasharray:'2 2',vectorEffect:'non-scaling-stroke',opacity:.6})),
+          hoverIdx!=null && hoverShare && h('div',{className:'cb-tip',style:{left:(px(hoverIdx)/W*100)+'%'}},
+            h('div',{className:'cb-tip-date'}, fmtShort(model.labels[hoverIdx]),
+              carried[hoverIdx] && h('span',{className:'cb-tip-carry'},' · no data (prior mix)')),
+            ...visible.filter(k=>(hoverShare[k]||0)>0)
+              .sort((a,b)=>(hoverShare[b]||0)-(hoverShare[a]||0))
+              .map(k=>h('div',{key:k,className:'cb-tip-row'},
+                h('span',{className:'cb-swatch',style:{background:colorOf(k)}}),
+                h('span',{className:'cb-tip-name'},k),
+                h('span',{className:'cb-tip-val'},Math.round((hoverShare[k]||0)*100)+'%')))),
+          h('div',{className:'cb-axis'},
+            h('span',null,fmtShort(model.labels[0])),
+            h('span',null,fmtShort(model.labels[model.labels.length-1]))),
+          h('div',{className:'cb-legend'},
+            ...ordered.map(k=>h('button',{key:k,
+                className:'cb-leg'+(hidden[k]?' off':''),
+                onClick:()=>setHidden(s=>({...s,[k]:!s[k]}))},
+                h('span',{className:'cb-swatch',style:{background:colorOf(k)}}), k)))
+        )
+  );
+}
+
 function CompetencyRatio({entries,cutoff,periodLabel}){
   const {competencies} = useConfig();
   const model = useMemo(()=>{
@@ -1065,17 +1211,14 @@ function CompetencyRatio({entries,cutoff,periodLabel}){
    ---------------------------------------------------------------- */
 function CategoryRatio({entries,cutoff,periodLabel}){
   const {categories} = useConfig();
-  const CAT_COLORS = ['#5aa7ff','#4ec98a','#f5a623','#ff7a93','#b78bff','#46c4d6','#ffa766','#9d7bff','#5fd0a8','#ff9f6b'];
-
   const model = useMemo(()=>{
     const scoped = entries.filter(e=>e.date>=cutoff);
     const counts = {}; categories.forEach(c=>counts[c]=0);
     scoped.forEach(e=>{ if(counts[e.category]==null) counts[e.category]=0; counts[e.category]++; });
     return { counts, total:scoped.length };
   },[entries,cutoff,categories]);
-
   const keys = Object.keys(model.counts).sort((a,b)=>model.counts[b]-model.counts[a]);
-  const colorOf = c => CAT_COLORS[categories.indexOf(c) % CAT_COLORS.length] || '#888';
+  const colorOf = c => CAT_PALETTE[categories.indexOf(c) % CAT_PALETTE.length] || '#888';
 
   return h('div',{className:'card',style:{marginTop:14}},
     h('div',{className:'cb-head'},
@@ -1110,7 +1253,6 @@ function CategoryRatio({entries,cutoff,periodLabel}){
    ---------------------------------------------------------------- */
 function ImpactRatio({entries,cutoff,periodLabel}){
   const {impacts} = useConfig();
-  const SCOPE_COLORS = ['#5aa7ff','#4ec98a','#f5a623','#ff7a93','#b78bff','#46c4d6','#ffa766'];
 
   const model = useMemo(()=>{
     const scoped = entries.filter(e=>e.date>=cutoff);
@@ -1121,7 +1263,7 @@ function ImpactRatio({entries,cutoff,periodLabel}){
   },[entries,cutoff,impacts]);
 
   const keys = Object.keys(model.counts);
-  const colorOf = i => SCOPE_COLORS[impacts.indexOf(i) % SCOPE_COLORS.length] || '#888';
+  const colorOf = i => SCOPE_PALETTE[impacts.indexOf(i) % SCOPE_PALETTE.length] || '#888';
 
   return h('div',{className:'card',style:{marginTop:14}},
     h('div',{className:'cb-head'},
@@ -1301,6 +1443,20 @@ function Impact({entries,period,setPeriod}){
     h(CompetencyRatio,{entries,cutoff,periodLabel}),
     h(CategoryRatio,{entries,cutoff,periodLabel}),
     h(ImpactRatio,{entries,cutoff,periodLabel}),
+
+    h('h4',{className:'sec'},'Share drift over time'),
+    h(ShareTrend,{title:'Competency mix',entries,cutoff,periodLabel,
+      allKeys:Object.keys(competencies),
+      keysOf:e=>e.comps,
+      colorOf:k=>competencies[k]?.c||'var(--amber)'}),
+    h(ShareTrend,{title:'Category mix',entries,cutoff,periodLabel,
+      allKeys:categories,
+      keysOf:e=>[e.category],
+      colorOf:k=>CAT_PALETTE[categories.indexOf(k)%CAT_PALETTE.length]||'#888'}),
+    h(ShareTrend,{title:'Impact-scope mix',entries,cutoff,periodLabel,
+      allKeys:impacts,
+      keysOf:e=>[e.impact],
+      colorOf:k=>SCOPE_PALETTE[impacts.indexOf(k)%SCOPE_PALETTE.length]||'#888'}),
   );
 }
 
