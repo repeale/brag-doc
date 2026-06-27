@@ -389,12 +389,12 @@ const iso = d => d.toISOString().slice(0,10);
 
 // Time periods for the Impact map. cutoff() returns the inclusive start date (YYYY-MM-DD).
 const PERIODS = [
-  { id:'all',  label:'All time',     cutoff:()=>'0000-01-01' },
-  { id:'30d',  label:'Last 30 days', cutoff:()=>weekAgo(30) },
-  { id:'90d',  label:'Last 90 days', cutoff:()=>weekAgo(90) },
-  { id:'6mo',  label:'Last 6 months',cutoff:()=>{const d=new Date();d.setMonth(d.getMonth()-6);return iso(d);} },
-  { id:'1yr',  label:'Last year',    cutoff:()=>{const d=new Date();d.setFullYear(d.getFullYear()-1);return iso(d);} },
-  { id:'ytd',  label:'This year',    cutoff:()=>new Date().getFullYear()+'-01-01' },
+  { id:'30d',  label:'Last 30 days',   cutoff:()=>weekAgo(30) },
+  { id:'90d',  label:'Last 90 days',   cutoff:()=>weekAgo(90) },
+  { id:'6mo',  label:'Last 6 months',  cutoff:()=>{const d=new Date();d.setMonth(d.getMonth()-6);return iso(d);} },
+  { id:'1yr',  label:'Last 12 months', cutoff:()=>{const d=new Date();d.setFullYear(d.getFullYear()-1);return iso(d);} },
+  { id:'ytd',  label:'This year',      cutoff:()=>new Date().getFullYear()+'-01-01' },
+  { id:'all',  label:'All time',       cutoff:()=>'0000-01-01' },
 ];
 
 const SEED = () => ({
@@ -974,6 +974,26 @@ function Analytics({entries,period,setPeriod}){
   const spanAll = entries.length? Math.round((Date.now()-new Date(entries.reduce((a,e)=>e.date<a?e.date:a,today())+'T00:00'))/864e5):0;
   const periodLabel = (PERIODS.find(p=>p.id===period)||PERIODS[0]).label;
 
+  // ---- streak: consecutive weeks (ending this week) with >=1 entry ----
+  const streak = useMemo(()=>{
+    if(!entries.length) return {current:0,longest:0};
+    const weekKey = ds => { const d=new Date(ds+'T00:00'); d.setDate(d.getDate()-d.getDay()); return iso(d); };
+    const active = new Set(entries.map(e=>weekKey(e.date)));
+    // walk back week by week from this week
+    const thisWeek = new Date(today()+'T00:00'); thisWeek.setDate(thisWeek.getDate()-thisWeek.getDay());
+    let current=0, cur=new Date(thisWeek);
+    while(active.has(iso(cur))){ current++; cur.setDate(cur.getDate()-7); }
+    // longest: scan all active weeks
+    const weeks=[...active].sort();
+    let longest=0, run=0, prev=null;
+    weeks.forEach(w=>{
+      if(prev){ const gap=Math.round((new Date(w)-new Date(prev))/(7*864e5)); run = gap===1?run+1:1; }
+      else run=1;
+      if(run>longest) longest=run; prev=w;
+    });
+    return {current,longest};
+  },[entries]);
+
   return h('div',null,
     h('div',{className:'periodbar'},
       ...PERIODS.map(p=>h('button',{key:p.id,
@@ -982,17 +1002,16 @@ function Analytics({entries,period,setPeriod}){
 
     h(TrendChart,{entries,period,cutoff,periodLabel,last30}),
 
-    h('div',{className:'grid g3',style:{marginTop:14}},
+    h('div',{className:'grid g4',style:{marginTop:14}},
       stat('Total entries',entries.length),
       stat('Starred',entries.filter(e=>e.star).length),
+      stat('Current streak',streak.current+(streak.current===1?' wk':' wks')),
       stat('Days tracked',spanAll),
     ),
+    streak.longest>0 && h('p',{className:'muted',style:{fontSize:11.5,margin:'8px 2px 0',fontFamily:'var(--mono)'}},
+      'Longest streak: '+streak.longest+(streak.longest===1?' week':' weeks')),
 
     h(Heatmap,{entries}),
-
-    h(CompetencyRatio,{entries,cutoff,periodLabel}),
-    h(CategoryRatio,{entries,cutoff,periodLabel}),
-    h(ImpactRatio,{entries,cutoff,periodLabel}),
   );
 }
 
@@ -1248,6 +1267,7 @@ function Impact({entries,period,setPeriod}){
     const m={}; impacts.forEach(i=>m[i]=0); scoped.forEach(e=>{if(m[e.impact]==null)m[e.impact]=0; m[e.impact]++;}); return m;
   },[scoped,impacts]);
   const max = Math.max(1,...Object.values(byComp));
+  const periodLabel = (PERIODS.find(p=>p.id===period)||PERIODS[0]).label;
 
   return h('div',null,
     h('div',{className:'periodbar'},
@@ -1276,7 +1296,11 @@ function Impact({entries,period,setPeriod}){
           h('div',{className:'name'},c),
           h('div',{className:'track'},h('i',{style:{width:(n/Math.max(1,...Object.values(byImpact))*100)+'%',background:'var(--violet)'}})),
           h('div',{className:'val'},n)))),
-    )
+    ),
+    h('h4',{className:'sec'},'Share of work'),
+    h(CompetencyRatio,{entries,cutoff,periodLabel}),
+    h(CategoryRatio,{entries,cutoff,periodLabel}),
+    h(ImpactRatio,{entries,cutoff,periodLabel}),
   );
 }
 
@@ -1350,9 +1374,18 @@ function TrendChart({entries,period,cutoff,periodLabel,last30}){
 }
 function fmtShort(s){ return new Date(s+'T00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}); }
 
-function stat(lbl,num,sub){ return h('div',{className:'card stat'},
-  h('div',{className:'lbl'},lbl), h('div',{className:'num'},num),
-  sub && h('div',{className:'delta',style:{color:'var(--ink-faint)'}},sub)); }
+function stat(lbl,num,delta){
+  // delta: optional number = change vs previous period. null/undefined => no delta shown.
+  let deltaEl = null;
+  if(delta!=null){
+    const up = delta>0, flat = delta===0;
+    const color = flat ? 'var(--ink-faint)' : (up ? 'var(--green)' : 'var(--rose)');
+    const arrow = flat ? '→' : (up ? '↑' : '↓');
+    deltaEl = h('div',{className:'delta',style:{color}}, arrow+' '+Math.abs(delta)+' vs prev');
+  }
+  return h('div',{className:'card stat'},
+    h('div',{className:'lbl'},lbl), h('div',{className:'num'},num), deltaEl);
+}
 
 /* ---------------- REVIEW BUILDER ---------------- */
 function Review({entries,period,setPeriod}){
