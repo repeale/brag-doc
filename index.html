@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="theme-color" content="#0e1014" />
-<title>Brag · engineering impact journal</title>
+<title>BragDoc · engineering impact journal</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -494,6 +494,7 @@ function App(){
 
   const titles = {
     journal:['Journal','Capture wins as they happen — searchable, taggable, kept locally'],
+    analytics:['Analytics','Your activity trend and headline numbers'],
     impact:['Impact map','How your entries stack up against each competency'],
     review:['Review builder','Turn your entries into a self-review draft'],
   };
@@ -520,6 +521,9 @@ function App(){
           entries:filtered, total:entries.length,
           fCat,setFCat,fComp,setFComp,fStar,setFStar,
           onOpen:setEditing, onStar:toggleStar }),
+        view==='analytics' && h(Analytics,{entries,
+          period: state.impactPeriod || '30d',
+          setPeriod: p=>setState(s=>({...s,impactPeriod:p}))}),
         view==='impact' && h(Impact,{entries,
           period: state.impactPeriod || '30d',
           setPeriod: p=>setState(s=>({...s,impactPeriod:p}))}),
@@ -590,11 +594,12 @@ function Rail({view,setView,entries,open,close,onExport,onImport}){
     h('div',{className:'rail'+(open?' show':'')},
     h('div',{className:'brand'},
       h('div',{className:'logo'},'B'),
-      h('div',null, h('h1',null,'Brag'), h('small',null,'impact journal'))),
+      h('div',null, h('h1',null,'BragDoc'), h('small',null,'impact journal'))),
     h('div',{className:'nav'},
       h('div',{className:'grp'},'Capture'),
       item('journal','▤','Journal',counts.journal),
       h('div',{className:'grp'},'Analyse'),
+      item('analytics','▦','Analytics'),
       item('impact','◈','Impact map'),
       h('div',{className:'grp'},'Output'),
       item('review','✎','Review builder'),
@@ -654,6 +659,30 @@ function EntryCard({e,onOpen,onStar}){
 }
 
 /* ---------------- IMPACT MAP ---------------- */
+/* ---------------- ANALYTICS ---------------- */
+function Analytics({entries,period,setPeriod}){
+  const cutoff = useMemo(()=>(PERIODS.find(p=>p.id===period)||PERIODS[0]).cutoff(),[period]);
+  const last30 = entries.filter(e=>e.date>=weekAgo(30)).length;
+  const spanAll = entries.length? Math.round((Date.now()-new Date(entries.reduce((a,e)=>e.date<a?e.date:a,today())+'T00:00'))/864e5):0;
+  const periodLabel = (PERIODS.find(p=>p.id===period)||PERIODS[0]).label;
+
+  return h('div',null,
+    h('div',{className:'periodbar'},
+      ...PERIODS.map(p=>h('button',{key:p.id,
+        className:'pchip'+(period===p.id?' on':''),
+        onClick:()=>setPeriod(p.id)},p.label))),
+
+    h(TrendChart,{entries,period,cutoff,periodLabel,last30}),
+
+    h('div',{className:'grid g3',style:{marginTop:14}},
+      stat('Total entries',entries.length),
+      stat('Starred',entries.filter(e=>e.star).length),
+      stat('Days tracked',spanAll),
+    ),
+  );
+}
+
+/* ---------------- IMPACT MAP ---------------- */
 function Impact({entries,period,setPeriod}){
   const cutoff = useMemo(()=>(PERIODS.find(p=>p.id===period)||PERIODS[0]).cutoff(),[period]);
   // Entries within the selected period (by entry date)
@@ -671,26 +700,14 @@ function Impact({entries,period,setPeriod}){
     const m={}; IMPACTS.forEach(i=>m[i]=0); scoped.forEach(e=>{if(m[e.impact]!=null)m[e.impact]++;}); return m;
   },[scoped]);
   const max = Math.max(1,...Object.values(byComp));
-  const last30 = entries.filter(e=>e.date>=weekAgo(30)).length;
-  const spanAll = entries.length? Math.round((Date.now()-new Date(entries.reduce((a,e)=>e.date<a?e.date:a,today())+'T00:00'))/864e5):0;
-  const periodLabel = (PERIODS.find(p=>p.id===period)||PERIODS[0]).label;
 
   return h('div',null,
-    // ---- period filter ----
     h('div',{className:'periodbar'},
       ...PERIODS.map(p=>h('button',{key:p.id,
         className:'pchip'+(period===p.id?' on':''),
         onClick:()=>setPeriod(p.id)},p.label))),
 
-    // ---- trend widget ----
-    h(TrendChart,{entries,period,cutoff,periodLabel,last30}),
-
-    h('div',{className:'grid g3',style:{marginTop:14}},
-      stat('Total entries',entries.length),
-      stat('Starred',entries.filter(e=>e.star).length),
-      stat('Days tracked',spanAll),
-    ),
-    h('h4',{className:'sec'},'Competency coverage'),
+    h('h4',{className:'sec',style:{marginTop:0}},'Competency coverage'),
     h('div',{className:'card'},
       Object.entries(byComp).map(([c,n])=>h('div',{className:'barrow',key:c,style:n===0?{opacity:.45}:null},
         h('div',{className:'name'},c,h('small',null,COMPETENCIES[c].d)),
