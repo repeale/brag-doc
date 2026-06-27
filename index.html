@@ -135,6 +135,33 @@
   .imp-opt .io-t{font-weight:600;margin-bottom:3px}
   .imp-opt.danger .io-t{color:var(--rose)}
   .imp-opt .io-d{font-size:12.5px;color:var(--ink-dim)}
+
+  /* ---- settings ---- */
+  .settings{display:flex;flex-direction:column;gap:16px;max-width:760px}
+  .set-card{padding:18px 20px}
+  .set-head{display:flex;align-items:flex-start;gap:12px;margin-bottom:6px}
+  .set-head .btn{margin-left:auto;flex-shrink:0}
+  .set-desc{font-size:12.5px;color:var(--ink-dim);margin:4px 0 0}
+  .set-add{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:12px 0;border-bottom:1px solid var(--line);margin-bottom:6px}
+  .set-in{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:9px 11px;color:var(--ink);outline:none;flex:1;min-width:120px}
+  .set-in:focus{border-color:var(--amber)}
+  .set-row{display:flex;align-items:center;gap:11px;padding:11px 0;border-bottom:1px solid var(--line)}
+  .set-row:last-child{border-bottom:none}
+  .set-dot{width:11px;height:11px;border-radius:50%;flex-shrink:0}
+  .set-row-main{flex:1;min-width:0}
+  .set-name{font-weight:600;font-size:14px}
+  .set-sub{font-size:12px;color:var(--ink-faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .set-count{font-family:var(--mono);font-size:10.5px;color:var(--ink-faint);flex-shrink:0}
+  .set-act{font-family:var(--mono);font-size:11.5px;color:var(--ink-dim);padding:5px 9px;border-radius:7px;border:1px solid transparent;flex-shrink:0}
+  .set-act:hover{background:var(--panel-2);color:var(--ink)}
+  .set-act.danger{color:var(--rose)}
+  .set-act.danger:hover{background:rgba(255,122,147,.12)}
+  .set-confirm{display:inline-flex;gap:4px;align-items:center}
+  .set-edit{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:11px 0;border-bottom:1px solid var(--line)}
+  .set-warn{font-size:12px;color:var(--amber);margin:10px 0 0;line-height:1.45}
+  .swatches{display:flex;gap:5px;flex-wrap:wrap}
+  .swatch{width:22px;height:22px;border-radius:6px;border:2px solid transparent;cursor:pointer}
+  .swatch.on{border-color:var(--ink);box-shadow:0 0 0 2px var(--panel),0 0 0 3px var(--ink)}
   .drawer{width:min(680px,100%);background:var(--panel);height:100%;border-left:1px solid var(--line);overflow:auto;animation:slide .22s ease}
   @keyframes slide{from{transform:translateX(30px);opacity:.5}to{transform:none;opacity:1}}
   .drawer .dh{position:sticky;top:0;background:var(--panel);border-bottom:1px solid var(--line);padding:16px 22px;display:flex;align-items:center;gap:12px;z-index:2}
@@ -290,7 +317,9 @@ const LocalStore = {
 const Store = LocalStore;
 
 /* ============================ DOMAIN DATA ============================ */
-const COMPETENCIES = {
+// These are DEFAULTS. The live, user-editable config lives in state and is
+// provided via ConfigContext. Components read the current lists with useConfig().
+const DEFAULT_COMPETENCIES = {
   Execution:  { c:'#5aa7ff', d:'Shipping & delivery' },
   Craft:      { c:'#4ec98a', d:'Code quality & technical depth' },
   Ownership:  { c:'#f5a623', d:'Driving outcomes end to end' },
@@ -299,8 +328,16 @@ const COMPETENCIES = {
   Strategy:   { c:'#46c4d6', d:'Direction & long-term thinking' },
   Leadership: { c:'#ffa766', d:'Leading people & initiatives' },
 };
-const CATEGORIES = ['Shipped','Project','Mentoring','Process','Incident','Learning','Recognition','Collaboration'];
-const IMPACTS = ['Team','Multi-team','Org','Company'];
+const DEFAULT_CATEGORIES = ['Shipped','Project','Mentoring','Process','Incident','Learning','Recognition','Collaboration'];
+const DEFAULT_IMPACTS = ['Team','Multi-team','Org','Company'];
+const PALETTE = ['#5aa7ff','#4ec98a','#f5a623','#b78bff','#ff7a93','#46c4d6','#ffa766','#9d7bff','#5fd0a8','#ff9f6b'];
+
+const ConfigContext = React.createContext({
+  competencies: DEFAULT_COMPETENCIES,
+  categories: DEFAULT_CATEGORIES,
+  impacts: DEFAULT_IMPACTS,
+});
+const useConfig = () => React.useContext(ConfigContext);
 
 const uid = () => Math.random().toString(36).slice(2,10);
 const today = () => new Date().toISOString().slice(0,10);
@@ -320,6 +357,11 @@ const PERIODS = [
 
 const SEED = () => ({
   impactPeriod:'30d',
+  config:{
+    competencies:{...DEFAULT_COMPETENCIES},
+    categories:[...DEFAULT_CATEGORIES],
+    impacts:[...DEFAULT_IMPACTS],
+  },
   entries:[
     { id:uid(), date:weekAgo(5), title:'Cut checkout p99 latency by 38%',
       body:'Profiled the checkout path, found N+1 queries in the cart service and added a batched loader plus a Redis read-through cache. Rolled out behind a flag; p99 dropped from 1.4s to 0.87s with no incidents.',
@@ -354,7 +396,18 @@ function App(){
   const [importing,setImporting] = useState(null); // {entries,...} pending merge/replace, or {error}
   const fileRef = useRef();
 
-  useEffect(()=>{ Store.load().then(s=> setState(s || SEED())); },[]);
+  useEffect(()=>{ Store.load().then(s=>{
+    if(!s){ setState(SEED()); return; }
+    // Migrate older saved state that predates editable config
+    if(!s.config){
+      s.config = {
+        competencies:{...DEFAULT_COMPETENCIES},
+        categories:[...DEFAULT_CATEGORIES],
+        impacts:[...DEFAULT_IMPACTS],
+      };
+    }
+    setState(s);
+  }); },[]);
   useEffect(()=>{ if(state) Store.save(state); },[state]);
 
   // Lock background scroll while an overlay (editor drawer or mobile rail) is open
@@ -391,6 +444,18 @@ function App(){
     setState(s=>({...s, entries:s.entries.map(e=>e.id===id?{...e,star:!e.star}:e)}));
   }
 
+  // Patch the editable config (competencies / categories / impacts).
+  function updateConfig(patch){
+    setState(s=>({...s, config:{...s.config, ...patch}}));
+  }
+  // Rename a referenced value across all entries (field: 'category'|'impact'|'comp').
+  function renameInEntries(field,oldV,newV){
+    setState(s=>({...s, entries:s.entries.map(e=>{
+      if(field==='comp') return e.comps.includes(oldV)?{...e,comps:e.comps.map(c=>c===oldV?newV:c)}:e;
+      return e[field]===oldV ? {...e,[field]:newV} : e;
+    })}));
+  }
+
   // ---- JSON export / import ----
   function exportData(){
     const payload = {
@@ -421,6 +486,13 @@ function App(){
     if(!Array.isArray(entries)) throw new Error('No entries found in that file.');
     // Validate + normalise each entry; skip anything malformed.
     const clean = [];
+    // Resolve the config to validate against: the file's own, else current live config.
+    const fileCfg = data.config || {};
+    const cats = Array.isArray(fileCfg.categories) ? fileCfg.categories : (state.config?.categories || DEFAULT_CATEGORIES);
+    const imps = Array.isArray(fileCfg.impacts) ? fileCfg.impacts : (state.config?.impacts || DEFAULT_IMPACTS);
+    const comps = fileCfg.competencies || state.config?.competencies || DEFAULT_COMPETENCIES;
+    const catFallback = cats[0] || 'Shipped';
+    const impFallback = imps[0] || 'Team';
     for(const e of entries){
       if(!e || typeof e!=='object') continue;
       if(typeof e.title!=='string' || !e.title.trim()) continue;
@@ -429,15 +501,15 @@ function App(){
         date: /^\d{4}-\d{2}-\d{2}$/.test(e.date) ? e.date : today(),
         title: e.title.trim(),
         body: typeof e.body==='string' ? e.body : '',
-        category: CATEGORIES.includes(e.category) ? e.category : 'Shipped',
-        impact: IMPACTS.includes(e.impact) ? e.impact : 'Team',
-        comps: Array.isArray(e.comps) ? e.comps.filter(c=>COMPETENCIES[c]) : [],
+        category: cats.includes(e.category) ? e.category : catFallback,
+        impact: imps.includes(e.impact) ? e.impact : impFallback,
+        comps: Array.isArray(e.comps) ? e.comps.filter(c=>comps[c]) : [],
         tags: Array.isArray(e.tags) ? e.tags.filter(t=>typeof t==='string') : [],
         star: !!e.star,
       });
     }
     if(clean.length===0) throw new Error('No valid entries to import.');
-    return { entries:clean, level: data.level, impactPeriod: data.impactPeriod };
+    return { entries:clean, impactPeriod: data.impactPeriod, config: data.config };
   }
 
   function onFilePicked(ev){
@@ -455,19 +527,28 @@ function App(){
 
   function applyImport(parsed, mode){
     setState(s=>{
-      let entries;
+      let entries, config = s.config;
       if(mode==='replace'){
         entries = parsed.entries;
+        if(parsed.config) config = parsed.config; // full restore adopts the file's config
       } else { // merge: keep existing, add new; dedupe by id
         const byId = new Map(s.entries.map(e=>[e.id,e]));
         parsed.entries.forEach(e=>byId.set(e.id,e)); // imported wins on id clash
         entries = [...byId.values()];
+        // union configs so imported entries keep valid references
+        if(parsed.config){
+          config = {
+            competencies:{...(parsed.config.competencies||{}), ...s.config.competencies},
+            categories:[...new Set([...(s.config.categories||[]), ...(parsed.config.categories||[])])],
+            impacts:[...new Set([...(s.config.impacts||[]), ...(parsed.config.impacts||[])])],
+          };
+        }
       }
       entries.sort((a,b)=>b.date.localeCompare(a.date));
       return {
         ...s,
         entries,
-        level: parsed.level || s.level,
+        config,
         impactPeriod: parsed.impactPeriod || s.impactPeriod,
       };
     });
@@ -497,10 +578,12 @@ function App(){
     analytics:['Analytics','Your activity trend and headline numbers'],
     impact:['Impact map','How your entries stack up against each competency'],
     review:['Review builder','Turn your entries into a self-review draft'],
+    settings:['Settings','Customise your competencies, categories, and impact scopes'],
   };
   const [tt,ts] = titles[view];
 
-  return h('div',{className:'app'},
+  return h(ConfigContext.Provider,{value:state.config},
+   h('div',{className:'app'},
     h(Rail,{view,setView,entries,open:railOpen,close:()=>setRailOpen(false),
       onExport:()=>{exportData();setRailOpen(false);},
       onImport:()=>{fileRef.current?.click();setRailOpen(false);}}),
@@ -514,7 +597,7 @@ function App(){
           h('span',{className:'muted',style:{fontSize:'17px'}},'⌕'),
           h('input',{placeholder:'Search entries…',value:q,onChange:e=>setQ(e.target.value)}),
         ),
-        h('button',{className:'btn amber',onClick:()=>setEditing('new')},'+ New entry'),
+        view!=='settings' && h('button',{className:'btn amber',onClick:()=>setEditing('new')},'+ New entry'),
       ),
       h('div',{className:'content'},
         view==='journal' && h(Journal,{
@@ -530,6 +613,8 @@ function App(){
         view==='review' && h(Review,{entries,
           period: state.impactPeriod || '30d',
           setPeriod: p=>setState(s=>({...s,impactPeriod:p}))}),
+        view==='settings' && h(Settings,{
+          config:state.config, entries, updateConfig, renameInEntries, flash}),
       )
     ),
     editing && h(Editor,{
@@ -543,7 +628,7 @@ function App(){
       onCancel:()=>setImporting(null),
       onConfirm:(mode)=>{ applyImport(importing,mode); setImporting(null); }}),
     toast && h('div',{className:'toast'},'✓ ',toast),
-  );
+  ));
 }
 
 /* ---------------- IMPORT MODAL ---------------- */
@@ -581,6 +666,184 @@ function ImportModal({info,existingCount,onCancel,onConfirm}){
   );
 }
 
+/* ---------------- SETTINGS ---------------- */
+function Settings({config,entries,updateConfig,renameInEntries,flash}){
+  const usage = useMemo(()=>{
+    const comp={}, cat={}, imp={};
+    entries.forEach(e=>{
+      cat[e.category]=(cat[e.category]||0)+1;
+      imp[e.impact]=(imp[e.impact]||0)+1;
+      e.comps.forEach(c=>comp[c]=(comp[c]||0)+1);
+    });
+    return {comp,cat,imp};
+  },[entries]);
+
+  // ---- competencies (object: name -> {c,d}) ----
+  function addComp(name,desc,color){
+    const n=name.trim(); if(!n) return false;
+    if(config.competencies[n]){ flash('That competency already exists'); return false; }
+    updateConfig({competencies:{...config.competencies,[n]:{c:color,d:desc.trim()}}});
+    flash('Added '+n); return true;
+  }
+  function editComp(oldName,newName,desc,color){
+    const nn=newName.trim(); if(!nn) return false;
+    const next={...config.competencies};
+    if(nn!==oldName && next[nn]){ flash('That name is taken'); return false; }
+    delete next[oldName];
+    next[nn]={c:color,d:desc.trim()};
+    updateConfig({competencies:next});
+    if(nn!==oldName) renameInEntries('comp',oldName,nn);
+    flash('Saved'); return true;
+  }
+  function delComp(name){
+    const next={...config.competencies}; delete next[name];
+    updateConfig({competencies:next});
+    flash('Deleted '+name);
+  }
+
+  // ---- categories / impacts (string arrays) ----
+  function addItem(kind,name){
+    const list=config[kind]; const n=name.trim(); if(!n) return false;
+    if(list.includes(n)){ flash('That already exists'); return false; }
+    updateConfig({[kind]:[...list,n]});
+    flash('Added '+n); return true;
+  }
+  function editItem(kind,oldName,newName){
+    const nn=newName.trim(); if(!nn) return false;
+    const list=config[kind];
+    if(nn!==oldName && list.includes(nn)){ flash('That name is taken'); return false; }
+    updateConfig({[kind]:list.map(x=>x===oldName?nn:x)});
+    if(nn!==oldName) renameInEntries(kind==='categories'?'category':'impact',oldName,nn);
+    flash('Saved'); return true;
+  }
+  function delItem(kind,name){
+    updateConfig({[kind]:config[kind].filter(x=>x!==name)});
+    flash('Deleted '+name);
+  }
+
+  return h('div',{className:'settings'},
+    h(CompetencySection,{competencies:config.competencies,usage:usage.comp,
+      onAdd:addComp,onEdit:editComp,onDelete:delComp}),
+    h(ListSection,{title:'Categories',
+      desc:'Used to classify each entry. Shown as filter chips and in the entry form.',
+      kind:'categories',items:config.categories,usage:usage.cat,
+      onAdd:n=>addItem('categories',n),onEdit:(o,n)=>editItem('categories',o,n),onDelete:n=>delItem('categories',n)}),
+    h(ListSection,{title:'Scope of impact',
+      desc:'How far each win reaches. Ordered from narrowest to broadest works best.',
+      kind:'impacts',items:config.impacts,usage:usage.imp,
+      onAdd:n=>addItem('impacts',n),onEdit:(o,n)=>editItem('impacts',o,n),onDelete:n=>delItem('impacts',n)}),
+  );
+}
+
+function CompetencySection({competencies,usage,onAdd,onEdit,onDelete}){
+  const [adding,setAdding] = useState(false);
+  const [name,setName] = useState(''); const [desc,setDesc] = useState('');
+  const [color,setColor] = useState(PALETTE[0]);
+  const [editingKey,setEditingKey] = useState(null);
+  const [confirmDel,setConfirmDel] = useState(null);
+  const keys = Object.keys(competencies);
+
+  function submitAdd(){ if(onAdd(name,desc,color)){ setName('');setDesc('');setColor(PALETTE[0]);setAdding(false); } }
+
+  return h('div',{className:'card set-card'},
+    h('div',{className:'set-head'},
+      h('div',null,
+        h('h4',{className:'sec',style:{margin:0}},'Competencies'),
+        h('p',{className:'set-desc'},'Skills your entries demonstrate. Each has a colour used across charts and tags.')),
+      h('button',{className:'btn',onClick:()=>setAdding(a=>!a)}, adding?'Cancel':'+ Add')),
+    adding && h('div',{className:'set-add'},
+      h('input',{className:'set-in',placeholder:'Name (e.g. Reliability)',value:name,
+        autoFocus:true,onChange:e=>setName(e.target.value),
+        onKeyDown:e=>{if(e.key==='Enter')submitAdd();}}),
+      h('input',{className:'set-in',placeholder:'Short description',value:desc,
+        onChange:e=>setDesc(e.target.value),onKeyDown:e=>{if(e.key==='Enter')submitAdd();}}),
+      h(Swatches,{value:color,onPick:setColor}),
+      h('button',{className:'btn amber',onClick:submitAdd},'Add')),
+    keys.length===0 && !adding && h('p',{className:'muted',style:{fontSize:13}},'No competencies. Add one to start tagging entries.'),
+    ...keys.map(k=> editingKey===k
+      ? h(CompEditRow,{key:k,name:k,data:competencies[k],
+          onSave:(nn,dd,cc)=>{ if(onEdit(k,nn,dd,cc)) setEditingKey(null); },
+          onCancel:()=>setEditingKey(null)})
+      : h('div',{className:'set-row',key:k},
+          h('span',{className:'set-dot',style:{background:competencies[k].c}}),
+          h('div',{className:'set-row-main'},
+            h('div',{className:'set-name'},k),
+            h('div',{className:'set-sub'},competencies[k].d || '—')),
+          h('span',{className:'set-count'},(usage[k]||0)+' used'),
+          h('button',{className:'set-act',onClick:()=>setEditingKey(k)},'Edit'),
+          confirmDel===k
+            ? h('span',{className:'set-confirm'},
+                h('button',{className:'set-act danger',onClick:()=>{onDelete(k);setConfirmDel(null);}},'Delete'),
+                h('button',{className:'set-act',onClick:()=>setConfirmDel(null)},'Keep'))
+            : h('button',{className:'set-act danger',onClick:()=>setConfirmDel(k)},'✕'))),
+    confirmDel && (usage[confirmDel]||0)>0 && h('p',{className:'set-warn'},
+      '“'+confirmDel+'” is used by '+usage[confirmDel]+' '+((usage[confirmDel]===1)?'entry':'entries')+'. Deleting it removes the tag from those entries\u2019 view; the entries themselves stay.')
+  );
+}
+
+function CompEditRow({name,data,onSave,onCancel}){
+  const [n,setN]=useState(name); const [d,setD]=useState(data.d); const [c,setC]=useState(data.c);
+  return h('div',{className:'set-edit'},
+    h('input',{className:'set-in',value:n,autoFocus:true,onChange:e=>setN(e.target.value)}),
+    h('input',{className:'set-in',value:d,placeholder:'Description',onChange:e=>setD(e.target.value)}),
+    h(Swatches,{value:c,onPick:setC}),
+    h('div',{style:{display:'flex',gap:8}},
+      h('button',{className:'btn amber',onClick:()=>onSave(n,d,c)},'Save'),
+      h('button',{className:'btn ghost',onClick:onCancel},'Cancel')));
+}
+
+function Swatches({value,onPick}){
+  return h('div',{className:'swatches'},
+    ...PALETTE.map(col=>h('button',{key:col,className:'swatch'+(value===col?' on':''),
+      style:{background:col},'aria-label':'colour '+col,onClick:()=>onPick(col)})));
+}
+
+function ListSection({title,desc,items,usage,onAdd,onEdit,onDelete}){
+  const [adding,setAdding]=useState(false);
+  const [name,setName]=useState('');
+  const [editingKey,setEditingKey]=useState(null);
+  const [confirmDel,setConfirmDel]=useState(null);
+
+  function submitAdd(){ if(onAdd(name)){ setName('');setAdding(false); } }
+
+  return h('div',{className:'card set-card'},
+    h('div',{className:'set-head'},
+      h('div',null,
+        h('h4',{className:'sec',style:{margin:0}},title),
+        h('p',{className:'set-desc'},desc)),
+      h('button',{className:'btn',onClick:()=>setAdding(a=>!a)}, adding?'Cancel':'+ Add')),
+    adding && h('div',{className:'set-add'},
+      h('input',{className:'set-in',placeholder:'Name',value:name,autoFocus:true,
+        onChange:e=>setName(e.target.value),onKeyDown:e=>{if(e.key==='Enter')submitAdd();}}),
+      h('button',{className:'btn amber',onClick:submitAdd},'Add')),
+    items.length===0 && !adding && h('p',{className:'muted',style:{fontSize:13}},'None yet. Add one above.'),
+    ...items.map(k=> editingKey===k
+      ? h(ListEditRow,{key:k,name:k,
+          onSave:nn=>{ if(onEdit(k,nn)) setEditingKey(null); },onCancel:()=>setEditingKey(null)})
+      : h('div',{className:'set-row',key:k},
+          h('div',{className:'set-row-main'},h('div',{className:'set-name'},k)),
+          h('span',{className:'set-count'},(usage[k]||0)+' used'),
+          h('button',{className:'set-act',onClick:()=>setEditingKey(k)},'Edit'),
+          confirmDel===k
+            ? h('span',{className:'set-confirm'},
+                h('button',{className:'set-act danger',onClick:()=>{onDelete(k);setConfirmDel(null);}},'Delete'),
+                h('button',{className:'set-act',onClick:()=>setConfirmDel(null)},'Keep'))
+            : h('button',{className:'set-act danger',onClick:()=>setConfirmDel(k)},'✕'))),
+    confirmDel && (usage[confirmDel]||0)>0 && h('p',{className:'set-warn'},
+      '“'+confirmDel+'” is used by '+usage[confirmDel]+' '+((usage[confirmDel]===1)?'entry':'entries')+'. Those entries keep their data but will show a “removed” marker until reassigned.')
+  );
+}
+
+function ListEditRow({name,onSave,onCancel}){
+  const [n,setN]=useState(name);
+  return h('div',{className:'set-edit'},
+    h('input',{className:'set-in',value:n,autoFocus:true,
+      onChange:e=>setN(e.target.value),onKeyDown:e=>{if(e.key==='Enter')onSave(n);}}),
+    h('div',{style:{display:'flex',gap:8}},
+      h('button',{className:'btn amber',onClick:()=>onSave(n)},'Save'),
+      h('button',{className:'btn ghost',onClick:onCancel},'Cancel')));
+}
+
 /* ---------------- RAIL ---------------- */
 function Rail({view,setView,entries,open,close,onExport,onImport}){
   const counts = {
@@ -608,6 +871,8 @@ function Rail({view,setView,entries,open,close,onExport,onImport}){
         h('span',{className:'ic'},'↧'),'Export JSON'),
       h('button',{onClick:()=>{onImport();}},
         h('span',{className:'ic'},'↥'),'Import JSON'),
+      h('div',{className:'grp'},'Configure'),
+      item('settings','⚙','Settings'),
     ),
     h('div',{className:'rail-foot'},
       h('span',{className:'dot'}), 'Saved locally'
@@ -617,17 +882,18 @@ function Rail({view,setView,entries,open,close,onExport,onImport}){
 
 /* ---------------- JOURNAL ---------------- */
 function Journal({entries,total,fCat,setFCat,fComp,setFComp,fStar,setFStar,onOpen,onStar}){
+  const {categories,competencies} = useConfig();
   const anyFilter = fCat||fComp||fStar;
   return h('div',null,
     h('div',{className:'filters'},
       h('button',{className:'chip'+(fStar?' on':''),onClick:()=>setFStar(!fStar)},'★ Starred'),
-      ...CATEGORIES.map(c=>h('button',{key:c,className:'chip'+(fCat===c?' on':''),
+      ...categories.map(c=>h('button',{key:c,className:'chip'+(fCat===c?' on':''),
         onClick:()=>setFCat(fCat===c?null:c)},c)),
       anyFilter && h('button',{className:'chip',style:{color:'var(--rose)'},
         onClick:()=>{setFCat(null);setFComp(null);setFStar(false);}},'✕ clear'),
     ),
     fComp && h('div',{style:{marginBottom:14,fontSize:12},className:'muted'},
-      'Filtered by competency: ',h('b',{style:{color:COMPETENCIES[fComp].c}},fComp)),
+      'Filtered by competency: ',h('b',{style:{color:competencies[fComp]?.c||'var(--ink)'}},fComp)),
     entries.length===0
       ? h('div',{className:'empty'},
           h('div',{className:'big'},'▤'),
@@ -639,7 +905,7 @@ function Journal({entries,total,fCat,setFCat,fComp,setFComp,fStar,setFStar,onOpe
   );
 }
 function EntryCard({e,onOpen,onStar}){
-  const ci = COMPETENCIES;
+  const {competencies:ci} = useConfig();
   return h('div',{className:'entry',onClick:()=>onOpen(e)},
     h('div',{className:'meta'},
       h('span',{className:'date'},fmtDate(e.date)),
@@ -651,14 +917,14 @@ function EntryCard({e,onOpen,onStar}){
     h('h3',null,e.title),
     h('p',null,e.body),
     h('div',{className:'foot'},
-      ...e.comps.map(c=>h('span',{key:c,className:'tag',
-        style:{background:ci[c].c+'22',color:ci[c].c}},c)),
+      ...e.comps.map(c=>{ const col=ci[c]?.c||'var(--ink-faint)';
+        return h('span',{key:c,className:'tag',
+          style:{background:col+'22',color:col}},c); }),
       ...e.tags.map(t=>h('span',{key:t,className:'pill'},'#',t)),
     )
   );
 }
 
-/* ---------------- IMPACT MAP ---------------- */
 /* ---------------- ANALYTICS ---------------- */
 function Analytics({entries,period,setPeriod}){
   const cutoff = useMemo(()=>(PERIODS.find(p=>p.id===period)||PERIODS[0]).cutoff(),[period]);
@@ -684,21 +950,22 @@ function Analytics({entries,period,setPeriod}){
 
 /* ---------------- IMPACT MAP ---------------- */
 function Impact({entries,period,setPeriod}){
+  const {competencies,categories,impacts} = useConfig();
   const cutoff = useMemo(()=>(PERIODS.find(p=>p.id===period)||PERIODS[0]).cutoff(),[period]);
   // Entries within the selected period (by entry date)
   const scoped = useMemo(()=>entries.filter(e=>e.date>=cutoff),[entries,cutoff]);
 
   const byComp = useMemo(()=>{
-    const m={}; Object.keys(COMPETENCIES).forEach(c=>m[c]=0);
+    const m={}; Object.keys(competencies).forEach(c=>m[c]=0);
     scoped.forEach(e=>e.comps.forEach(c=>{if(m[c]!=null)m[c]++;}));
     return m;
-  },[scoped]);
+  },[scoped,competencies]);
   const byCat = useMemo(()=>{
-    const m={}; CATEGORIES.forEach(c=>m[c]=0); scoped.forEach(e=>{if(m[e.category]==null)m[e.category]=0; m[e.category]++;}); return m;
-  },[scoped]);
+    const m={}; categories.forEach(c=>m[c]=0); scoped.forEach(e=>{if(m[e.category]==null)m[e.category]=0; m[e.category]++;}); return m;
+  },[scoped,categories]);
   const byImpact = useMemo(()=>{
-    const m={}; IMPACTS.forEach(i=>m[i]=0); scoped.forEach(e=>{if(m[e.impact]!=null)m[e.impact]++;}); return m;
-  },[scoped]);
+    const m={}; impacts.forEach(i=>m[i]=0); scoped.forEach(e=>{if(m[e.impact]==null)m[e.impact]=0; m[e.impact]++;}); return m;
+  },[scoped,impacts]);
   const max = Math.max(1,...Object.values(byComp));
 
   return h('div',null,
@@ -710,8 +977,8 @@ function Impact({entries,period,setPeriod}){
     h('h4',{className:'sec',style:{marginTop:0}},'Competency coverage'),
     h('div',{className:'card'},
       Object.entries(byComp).map(([c,n])=>h('div',{className:'barrow',key:c,style:n===0?{opacity:.45}:null},
-        h('div',{className:'name'},c,h('small',null,COMPETENCIES[c].d)),
-        h('div',{className:'track'},h('i',{style:{width:(n/max*100)+'%',background:COMPETENCIES[c].c}})),
+        h('div',{className:'name'},c,h('small',null,competencies[c]?.d||'')),
+        h('div',{className:'track'},h('i',{style:{width:(n/max*100)+'%',background:competencies[c]?.c||'var(--amber)'}})),
         h('div',{className:'val'},n))) ,
       Object.values(byComp).every(v=>v===0)&&h('p',{className:'muted'},'No entries in this period yet.')
     ),
@@ -867,9 +1134,10 @@ function grpBtn(t,v,grp,setGrp){ return h('button',{className:grp===v?'on':'',on
 
 /* ---------------- EDITOR DRAWER ---------------- */
 function Editor({entry,onClose,onSave,onDelete}){
+  const {competencies,categories,impacts} = useConfig();
   const [f,setF] = useState(entry || {
     id:uid(), date:today(), title:'', body:'',
-    category:'Shipped', impact:'Team', comps:[], tags:[], star:false });
+    category:categories[0]||'Shipped', impact:impacts[0]||'Team', comps:[], tags:[], star:false });
   const [tagDraft,setTagDraft] = useState('');
   const isNew = !entry;
   const titleRef = useRef();
@@ -906,19 +1174,24 @@ function Editor({entry,onClose,onSave,onDelete}){
           h('div',{className:'field'},
             h('label',null,'Category'),
             h('select',{value:f.category,onChange:e=>set('category',e.target.value)},
-              ...CATEGORIES.map(c=>h('option',{key:c,value:c},c))))),
+              ...(categories.includes(f.category)?[]:[h('option',{key:f.category,value:f.category},f.category+' (removed)')]),
+              ...categories.map(c=>h('option',{key:c,value:c},c))))),
         h('div',{className:'field'},
           h('label',null,'Scope of impact'),
           h('div',{className:'selgrid'},
-            ...IMPACTS.map(i=>h('button',{key:i,className:f.impact===i?'on':'',
-              onClick:()=>set('impact',i)},i)))),
+            ...impacts.map(i=>h('button',{key:i,className:f.impact===i?'on':'',
+              onClick:()=>set('impact',i)},i)),
+            ...(impacts.includes(f.impact)?[]:[h('button',{key:f.impact,className:'on',
+              onClick:()=>{}},f.impact+' (removed)')]))),
         h('div',{className:'field'},
           h('label',null,'Competencies demonstrated'),
           h('div',{className:'selgrid'},
-            ...Object.keys(COMPETENCIES).map(c=>h('button',{key:c,
+            ...Object.keys(competencies).map(c=>h('button',{key:c,
               className:f.comps.includes(c)?'on':'',
-              style:f.comps.includes(c)?{borderColor:COMPETENCIES[c].c,color:COMPETENCIES[c].c,background:COMPETENCIES[c].c+'18'}:{},
-              onClick:()=>toggleComp(c)},c)))),
+              style:f.comps.includes(c)?{borderColor:competencies[c].c,color:competencies[c].c,background:competencies[c].c+'18'}:{},
+              onClick:()=>toggleComp(c)},c)),
+            ...f.comps.filter(c=>!competencies[c]).map(c=>h('button',{key:c,className:'on',
+              onClick:()=>toggleComp(c)},c+' (removed)')))),
         h('div',{className:'field'},
           h('label',null,'Tags'),
           h('div',{className:'tagin'},
