@@ -13,13 +13,28 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script>
+  // Apply saved theme before first paint to avoid a flash
+  try { document.documentElement.setAttribute('data-theme',
+    localStorage.getItem('bragdoc.theme')==='light' ? 'light' : 'dark'); } catch(e){}
+</script>
 <style>
   :root{
     --bg:#0e1014; --panel:#15181f; --panel-2:#1b1f28; --line:#272c38;
     --ink:#e7e9ee; --ink-dim:#9aa1b1; --ink-faint:#5f6678;
     --amber:#f5a623; --amber-soft:rgba(245,166,35,.12);
     --green:#4ec98a; --blue:#5aa7ff; --violet:#b78bff; --rose:#ff7a93;
+    --hm-empty:#1f2530;
+    --bg-blur:rgba(14,16,20,.85);
     --radius:10px; --mono:'JetBrains Mono',monospace; --sans:'Inter',system-ui,sans-serif;
+  }
+  [data-theme="light"]{
+    --bg:#f6f7f9; --panel:#ffffff; --panel-2:#f0f2f5; --line:#e2e5ea;
+    --ink:#1a1d24; --ink-dim:#5a6172; --ink-faint:#9aa1b1;
+    --amber:#d6850a; --amber-soft:rgba(214,133,10,.12);
+    --green:#1f9d5e; --blue:#2b7fd4; --violet:#7d4fd1; --rose:#d84765;
+    --hm-empty:#e6e9ee;
+    --bg-blur:rgba(246,247,249,.85);
   }
   *{box-sizing:border-box}
   html,body{margin:0;height:100%}
@@ -49,11 +64,17 @@
   .nav button .ic{width:20px;text-align:center;font-family:var(--mono);font-size:16px}
   .nav button .ct{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--ink-faint)}
   .rail-foot{border-top:1px solid var(--line);padding:10px 12px;display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;color:var(--ink-faint)}
+  .theme-row{border-top:1px solid var(--line);padding:10px 12px;display:flex;align-items:center;gap:10px}
+  .theme-lbl{font-family:var(--mono);font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint)}
+  .theme-seg{margin-left:auto;display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+  .theme-seg button{font-family:var(--mono);font-size:11px;padding:5px 10px;color:var(--ink-dim)}
+  .theme-seg button.on{background:var(--amber-soft);color:var(--amber);font-weight:600}
+  .theme-seg button:not(.on):hover{background:var(--panel-2);color:var(--ink)}
   .dot{width:7px;height:7px;border-radius:50%;background:var(--green)}
 
   /* ---- main ---- */
   .main{overflow:auto;position:relative}
-  .topbar{position:sticky;top:0;z-index:5;background:rgba(14,16,20,.85);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:14px 26px;display:flex;align-items:center;gap:14px}
+  .topbar{position:sticky;top:0;z-index:5;background:var(--bg-blur);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:14px 26px;display:flex;align-items:center;gap:14px}
   .topbar h2{margin:0;font-size:17px;font-weight:600}
   .topbar .sub{color:var(--ink-faint);font-size:12.5px}
   .spacer{flex:1}
@@ -138,7 +159,7 @@
   .hm-week{display:flex;flex-direction:column;gap:3px}
   .hm-cell{width:11px;height:11px;border-radius:2.5px;background:var(--panel-2)}
   .hm-cell.empty{background:transparent}
-  .hm-cell.lv0{background:#1f2530}
+  .hm-cell.lv0{background:var(--hm-empty)}
   .hm-cell.lv1{background:rgba(245,166,35,.30)}
   .hm-cell.lv2{background:rgba(245,166,35,.52)}
   .hm-cell.lv3{background:rgba(245,166,35,.76)}
@@ -455,6 +476,11 @@ function App(){
   const [fComp,setFComp] = useState(null);
   const [fStar,setFStar] = useState(false);
   const [toast,setToast] = useState(null);
+  const [theme,setThemeRaw] = useState(()=>{
+    try { return localStorage.getItem('bragdoc.theme')==='light' ? 'light' : 'dark'; }
+    catch { return 'dark'; }
+  });
+  const setTheme = t => { try{localStorage.setItem('bragdoc.theme',t);}catch{} setThemeRaw(t); };
   const [railOpen,setRailOpen] = useState(false);
   const [importing,setImporting] = useState(null); // {entries,...} pending merge/replace, or {error}
   const fileRef = useRef();
@@ -486,6 +512,13 @@ function App(){
     window.addEventListener('keydown',onKey);
     return ()=>window.removeEventListener('keydown',onKey);
   },[]);
+
+  // Apply theme to the document root (and keep the meta theme-color in sync)
+  useEffect(()=>{
+    document.documentElement.setAttribute('data-theme', theme);
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if(meta) meta.setAttribute('content', theme==='light' ? '#f6f7f9' : '#0e1014');
+  },[theme]);
 
   // Sync the URL fragment -> view (handles refresh, back/forward, manual edits)
   useEffect(()=>{
@@ -657,6 +690,7 @@ function App(){
   return h(ConfigContext.Provider,{value:state.config},
    h('div',{className:'app'},
     h(Rail,{view,setView,entries,open:railOpen,close:()=>setRailOpen(false),
+      theme,setTheme,
       onExport:()=>{exportData();setRailOpen(false);},
       onImport:()=>{fileRef.current?.click();setRailOpen(false);}}),
     h('div',{className:'main'},
@@ -917,7 +951,7 @@ function ListEditRow({name,onSave,onCancel}){
 }
 
 /* ---------------- RAIL ---------------- */
-function Rail({view,setView,entries,open,close,onExport,onImport}){
+function Rail({view,setView,entries,open,close,onExport,onImport,theme,setTheme}){
   const counts = {
     journal: entries.length,
     star: entries.filter(e=>e.star).length,
@@ -946,6 +980,11 @@ function Rail({view,setView,entries,open,close,onExport,onImport}){
       h('div',{className:'grp'},'Configure'),
       item('settings','⚙','Settings'),
     ),
+    h('div',{className:'theme-row'},
+      h('span',{className:'theme-lbl'},'Theme'),
+      h('div',{className:'theme-seg'},
+        h('button',{className:theme==='dark'?'on':'',onClick:()=>setTheme('dark'),'aria-label':'Dark theme'},'☾ Dark'),
+        h('button',{className:theme==='light'?'on':'',onClick:()=>setTheme('light'),'aria-label':'Light theme'},'☀ Light'))),
     h('div',{className:'rail-foot'},
       h('span',{className:'dot'}), 'Saved locally'
     )
