@@ -95,6 +95,26 @@
   .chip.on{border-color:var(--amber);color:var(--amber);background:var(--amber-soft)}
   .chip:hover{color:var(--ink)}
 
+  /* ---- journal controls ---- */
+  .jrow{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+  .jcount{font-family:var(--mono);font-size:12px;color:var(--ink-faint)}
+  .jsort{font-family:var(--mono);font-size:11px;color:var(--ink-faint);display:inline-flex;align-items:center;gap:6px}
+  .jsort select{background:var(--panel-2);border:1px solid var(--line);border-radius:7px;padding:6px 8px;color:var(--ink);outline:none;font-size:12px}
+  .jsort select:focus{border-color:var(--amber)}
+  .jpills{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;align-items:center}
+  .jpill{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;padding:3px 4px 3px 9px;border:1px solid var(--line);border-radius:6px;background:var(--panel)}
+  .jpill button{color:var(--ink-faint);font-size:14px;line-height:1;padding:0 3px}
+  .jpill button:hover{color:var(--rose)}
+  .jclear{font-family:var(--mono);font-size:11px;color:var(--rose);padding:3px 8px}
+  .jclear:hover{text-decoration:underline}
+  .jfilters{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin-bottom:18px;display:flex;flex-direction:column;gap:14px}
+  .jfg-lbl{font-family:var(--mono);font-size:10px;letter-spacing:.8px;text-transform:uppercase;color:var(--ink-faint);margin-bottom:7px}
+  .jfg-chips{display:flex;flex-wrap:wrap;gap:7px}
+  .jgroup{margin-bottom:8px}
+  .jmonth{display:flex;align-items:center;gap:9px;font-family:var(--mono);font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:var(--ink-faint);margin:18px 0 11px}
+  .jmonth::after{content:"";flex:1;height:1px;background:var(--line)}
+  .jmonth-n{background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:1px 8px;color:var(--ink-dim);letter-spacing:0}
+
   .entry{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;margin-bottom:12px;transition:.12s;cursor:pointer}
   .entry:hover{border-color:var(--ink-faint);transform:translateY(-1px)}
   .entry .meta{display:flex;align-items:center;gap:10px;margin-bottom:7px;flex-wrap:wrap}
@@ -472,9 +492,11 @@ function App(){
   const setView = v => { window.location.hash = v; setViewRaw(v); };
   const [editing,setEditing] = useState(null); // entry obj or 'new'
   const [q,setQ] = useState('');
-  const [fCat,setFCat] = useState(null);
-  const [fComp,setFComp] = useState(null);
+  const [fCats,setFCats] = useState([]);
+  const [fComps,setFComps] = useState([]);
+  const [fImpacts,setFImpacts] = useState([]);
   const [fStar,setFStar] = useState(false);
+  const [sortBy,setSortBy] = useState('newest');
   const [toast,setToast] = useState(null);
   const [theme,setThemeRaw] = useState(()=>{
     try { return localStorage.getItem('bragdoc.theme')==='light' ? 'light' : 'dark'; }
@@ -664,17 +686,23 @@ function App(){
 
   const entries = state?.entries || [];
   const filtered = useMemo(()=>{
-    return entries.filter(e=>{
+    const out = entries.filter(e=>{
       if(fStar && !e.star) return false;
-      if(fCat && e.category!==fCat) return false;
-      if(fComp && !e.comps.includes(fComp)) return false;
+      if(fCats.length && !fCats.includes(e.category)) return false;
+      if(fImpacts.length && !fImpacts.includes(e.impact)) return false;
+      if(fComps.length && !fComps.some(c=>e.comps.includes(c))) return false;
       if(q){
         const hay = (e.title+' '+e.body+' '+e.tags.join(' ')).toLowerCase();
         if(!hay.includes(q.toLowerCase())) return false;
       }
       return true;
-    }).sort((a,b)=> b.date.localeCompare(a.date));
-  },[entries,q,fCat,fComp,fStar]);
+    });
+    const byDateDesc = (a,b)=> b.date.localeCompare(a.date);
+    if(sortBy==='oldest') out.sort((a,b)=> a.date.localeCompare(b.date));
+    else if(sortBy==='starred') out.sort((a,b)=> (b.star?1:0)-(a.star?1:0) || byDateDesc(a,b));
+    else out.sort(byDateDesc); // newest
+    return out;
+  },[entries,q,fCats,fComps,fImpacts,fStar,sortBy]);
 
   if(!state) return null;
 
@@ -708,7 +736,8 @@ function App(){
       h('div',{className:'content'},
         view==='journal' && h(Journal,{
           entries:filtered, total:entries.length,
-          fCat,setFCat,fComp,setFComp,fStar,setFStar,
+          fCats,setFCats,fComps,setFComps,fImpacts,setFImpacts,fStar,setFStar,
+          sortBy,setSortBy,
           onOpen:setEditing, onStar:toggleStar }),
         view==='analytics' && h(Analytics,{entries,
           period: state.impactPeriod || '30d',
@@ -992,19 +1021,67 @@ function Rail({view,setView,entries,open,close,onExport,onImport,theme,setTheme}
 }
 
 /* ---------------- JOURNAL ---------------- */
-function Journal({entries,total,fCat,setFCat,fComp,setFComp,fStar,setFStar,onOpen,onStar}){
-  const {categories,competencies} = useConfig();
-  const anyFilter = fCat||fComp||fStar;
+function Journal({entries,total,fCats,setFCats,fComps,setFComps,fImpacts,setFImpacts,fStar,setFStar,sortBy,setSortBy,onOpen,onStar}){
+  const {categories,competencies,impacts} = useConfig();
+  const [showFilters,setShowFilters] = useState(false);
+  const activeCount = fCats.length+fComps.length+fImpacts.length+(fStar?1:0);
+  const compKeys = Object.keys(competencies);
+
+  const toggle = (arr,setArr,v)=> setArr(arr.includes(v)?arr.filter(x=>x!==v):[...arr,v]);
+  const clearAll = ()=>{ setFCats([]);setFComps([]);setFImpacts([]);setFStar(false); };
+
+  // group sorted entries by month
+  const groups = useMemo(()=>{
+    const m = [];
+    let cur = null;
+    entries.forEach(e=>{
+      const key = e.date.slice(0,7); // YYYY-MM
+      if(!cur || cur.key!==key){ cur={key,label:monthLabel(e.date),items:[]}; m.push(cur); }
+      cur.items.push(e);
+    });
+    return m;
+  },[entries]);
+
   return h('div',null,
-    h('div',{className:'filters'},
-      h('button',{className:'chip'+(fStar?' on':''),onClick:()=>setFStar(!fStar)},'★ Starred'),
-      ...categories.map(c=>h('button',{key:c,className:'chip'+(fCat===c?' on':''),
-        onClick:()=>setFCat(fCat===c?null:c)},c)),
-      anyFilter && h('button',{className:'chip',style:{color:'var(--rose)'},
-        onClick:()=>{setFCat(null);setFComp(null);setFStar(false);}},'✕ clear'),
-    ),
-    fComp && h('div',{style:{marginBottom:14,fontSize:12},className:'muted'},
-      'Filtered by competency: ',h('b',{style:{color:competencies[fComp]?.c||'var(--ink)'}},fComp)),
+    // ---- control row: count, sort, filter toggle ----
+    h('div',{className:'jrow'},
+      h('span',{className:'jcount'},
+        entries.length===total
+          ? total+(total===1?' entry':' entries')
+          : entries.length+' of '+total+' shown'),
+      h('div',{style:{flex:1}}),
+      h('label',{className:'jsort'}, 'Sort ',
+        h('select',{value:sortBy,onChange:e=>setSortBy(e.target.value)},
+          h('option',{value:'newest'},'Newest first'),
+          h('option',{value:'oldest'},'Oldest first'),
+          h('option',{value:'starred'},'Starred first'))),
+      h('button',{className:'btn'+(activeCount?' amber':''),onClick:()=>setShowFilters(s=>!s)},
+        '⛃ Filters'+(activeCount?' ('+activeCount+')':''))),
+
+    // ---- active filter pills (always visible when any active) ----
+    activeCount>0 && h('div',{className:'jpills'},
+      fStar && pill('★ Starred','var(--amber)',()=>setFStar(false)),
+      ...fCats.map(c=>pill(c,'var(--ink-dim)',()=>toggle(fCats,setFCats,c))),
+      ...fComps.map(c=>pill(c,competencies[c]?.c||'var(--ink-dim)',()=>toggle(fComps,setFComps,c))),
+      ...fImpacts.map(c=>pill('◈ '+c,'var(--violet)',()=>toggle(fImpacts,setFImpacts,c))),
+      h('button',{className:'jclear',onClick:clearAll},'Clear all')),
+
+    // ---- expandable filter panel ----
+    showFilters && h('div',{className:'jfilters'},
+      filterGroup('Starred', [
+        h('button',{key:'s',className:'chip'+(fStar?' on':''),onClick:()=>setFStar(!fStar)},'★ Starred only')]),
+      filterGroup('Category', categories.map(c=>
+        h('button',{key:c,className:'chip'+(fCats.includes(c)?' on':''),
+          onClick:()=>toggle(fCats,setFCats,c)},c))),
+      filterGroup('Competency', compKeys.map(c=>
+        h('button',{key:c,className:'chip'+(fComps.includes(c)?' on':''),
+          style:fComps.includes(c)?{borderColor:competencies[c].c,color:competencies[c].c,background:competencies[c].c+'18'}:null,
+          onClick:()=>toggle(fComps,setFComps,c)},c))),
+      filterGroup('Scope of impact', impacts.map(c=>
+        h('button',{key:c,className:'chip'+(fImpacts.includes(c)?' on':''),
+          onClick:()=>toggle(fImpacts,setFImpacts,c)},c)))),
+
+    // ---- entries grouped by month ----
     entries.length===0
       ? h('div',{className:'empty'},
           h('div',{className:'big'},'▤'),
@@ -1012,9 +1089,23 @@ function Journal({entries,total,fCat,setFCat,fComp,setFComp,fStar,setFStar,onOpe
           h('p',null, total===0
             ? 'Add your first win. The smallest ones add up at review time.'
             : 'Try clearing a filter or changing your search.'))
-      : entries.map(e=>h(EntryCard,{key:e.id,e,onOpen,onStar})),
+      : groups.map(g=>h('div',{key:g.key,className:'jgroup'},
+          h('div',{className:'jmonth'}, g.label, h('span',{className:'jmonth-n'},g.items.length)),
+          g.items.map(e=>h(EntryCard,{key:e.id,e,onOpen,onStar})))),
   );
 }
+function monthLabel(date){ return new Date(date+'T00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'}); }
+function pill(label,color,onRemove){
+  return h('span',{className:'jpill',style:{borderColor:color}},
+    h('span',{style:{color}},label),
+    h('button',{onClick:onRemove,'aria-label':'Remove filter'},'×'));
+}
+function filterGroup(label,children){
+  return h('div',{className:'jfg'},
+    h('div',{className:'jfg-lbl'},label),
+    h('div',{className:'jfg-chips'},...children));
+}
+
 function EntryCard({e,onOpen,onStar}){
   const {competencies:ci} = useConfig();
   return h('div',{className:'entry',onClick:()=>onOpen(e)},
