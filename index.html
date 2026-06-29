@@ -74,7 +74,7 @@
 
   /* ---- main ---- */
   .main{overflow:auto;position:relative}
-  .topbar{position:sticky;top:0;z-index:5;background:var(--bg-blur);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:14px 26px;display:flex;align-items:center;gap:14px}
+  .topbar{position:sticky;top:0;z-index:5;background:var(--bg-blur);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:14px max(26px,calc((100% - 1180px)/2));display:flex;align-items:center;gap:14px}
   .topbar h2{margin:0;font-size:17px;font-weight:600}
   .topbar .sub{color:var(--ink-faint);font-size:12.5px}
   .spacer{flex:1}
@@ -87,7 +87,7 @@
   .btn.amber:hover{filter:brightness(1.07)}
   .btn.ghost{background:none;border-color:transparent;color:var(--ink-dim)}
   .btn.ghost:hover{background:var(--panel-2)}
-  .content{padding:26px;max-width:1080px}
+  .content{padding:26px;max-width:1180px;margin:0 auto}
 
   /* ---- entry list ---- */
   .filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;align-items:center}
@@ -233,7 +233,7 @@
   .imp-opt .io-d{font-size:12.5px;color:var(--ink-dim)}
 
   /* ---- settings ---- */
-  .settings{display:flex;flex-direction:column;gap:16px;max-width:760px}
+  .settings{display:flex;flex-direction:column;gap:16px;max-width:860px;margin:0 auto}
   .set-card{padding:18px 20px}
   .set-head{display:flex;align-items:flex-start;gap:12px;margin-bottom:6px}
   .set-head .btn{margin-left:auto;flex-shrink:0}
@@ -242,6 +242,10 @@
   .set-in{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:9px 11px;color:var(--ink);outline:none;flex:1;min-width:120px}
   .set-in:focus{border-color:var(--amber)}
   .set-row{display:flex;align-items:center;gap:11px;padding:11px 0;border-bottom:1px solid var(--line)}
+  .set-grip{cursor:grab;color:var(--ink-faint);font-size:13px;line-height:1;letter-spacing:-2px;user-select:none;flex-shrink:0;touch-action:none}
+  .set-grip:active{cursor:grabbing}
+  .set-row.dragging{opacity:.45}
+  .set-row.dragover{box-shadow:inset 0 2px 0 var(--amber)}
   .set-row:last-child{border-bottom:none}
   .set-dot{width:11px;height:11px;border-radius:50%;flex-shrink:0}
   .set-row-main{flex:1;min-width:0}
@@ -856,35 +860,57 @@ function Settings({config,entries,updateConfig,renameInEntries,flash}){
     flash('Deleted '+name);
   }
 
+  // ---- reordering ----
+  function moveInArray(arr,from,to){
+    const copy=[...arr]; const [m]=copy.splice(from,1); copy.splice(to,0,m); return copy;
+  }
+  function reorderComp(from,to){
+    const keys=Object.keys(config.competencies);
+    if(from===to||from<0||to<0||from>=keys.length||to>=keys.length) return;
+    const order=moveInArray(keys,from,to);
+    const next={}; order.forEach(k=>next[k]=config.competencies[k]); // rebuild in new order
+    updateConfig({competencies:next});
+  }
+  function reorderItem(kind,from,to){
+    const list=config[kind];
+    if(from===to||from<0||to<0||from>=list.length||to>=list.length) return;
+    updateConfig({[kind]:moveInArray(list,from,to)});
+  }
+
   return h('div',{className:'settings'},
     h(CompetencySection,{competencies:config.competencies,usage:usage.comp,
-      onAdd:addComp,onEdit:editComp,onDelete:delComp}),
+      onAdd:addComp,onEdit:editComp,onDelete:delComp,onReorder:reorderComp}),
     h(ListSection,{title:'Categories',
       desc:'Used to classify each entry. Shown as filter chips and in the entry form.',
       kind:'categories',items:config.categories,usage:usage.cat,
-      onAdd:n=>addItem('categories',n),onEdit:(o,n)=>editItem('categories',o,n),onDelete:n=>delItem('categories',n)}),
+      onAdd:n=>addItem('categories',n),onEdit:(o,n)=>editItem('categories',o,n),onDelete:n=>delItem('categories',n),
+      onReorder:(f,t)=>reorderItem('categories',f,t)}),
     h(ListSection,{title:'Scope of impact',
       desc:'How far each win reaches. Ordered from narrowest to broadest works best.',
       kind:'impacts',items:config.impacts,usage:usage.imp,
-      onAdd:n=>addItem('impacts',n),onEdit:(o,n)=>editItem('impacts',o,n),onDelete:n=>delItem('impacts',n)}),
+      onAdd:n=>addItem('impacts',n),onEdit:(o,n)=>editItem('impacts',o,n),onDelete:n=>delItem('impacts',n),
+      onReorder:(f,t)=>reorderItem('impacts',f,t)}),
   );
 }
 
-function CompetencySection({competencies,usage,onAdd,onEdit,onDelete}){
+function CompetencySection({competencies,usage,onAdd,onEdit,onDelete,onReorder}){
   const [adding,setAdding] = useState(false);
   const [name,setName] = useState(''); const [desc,setDesc] = useState('');
   const [color,setColor] = useState(PALETTE[0]);
   const [editingKey,setEditingKey] = useState(null);
   const [confirmDel,setConfirmDel] = useState(null);
+  const [dragIdx,setDragIdx] = useState(null);
+  const [overIdx,setOverIdx] = useState(null);
   const keys = Object.keys(competencies);
 
   function submitAdd(){ if(onAdd(name,desc,color)){ setName('');setDesc('');setColor(PALETTE[0]);setAdding(false); } }
+  function onDrop(){ if(dragIdx!=null&&overIdx!=null&&dragIdx!==overIdx) onReorder(dragIdx,overIdx); setDragIdx(null);setOverIdx(null); }
 
   return h('div',{className:'card set-card'},
     h('div',{className:'set-head'},
       h('div',null,
         h('h4',{className:'sec',style:{margin:0}},'Competencies'),
-        h('p',{className:'set-desc'},'Skills your entries demonstrate. Each has a colour used across charts and tags.')),
+        h('p',{className:'set-desc'},'Skills your entries demonstrate. Each has a colour used across charts and tags. Drag to reorder.')),
       h('button',{className:'btn',onClick:()=>setAdding(a=>!a)}, adding?'Cancel':'+ Add')),
     adding && h('div',{className:'set-add'},
       h('input',{className:'set-in',placeholder:'Name (e.g. Reliability)',value:name,
@@ -895,11 +921,17 @@ function CompetencySection({competencies,usage,onAdd,onEdit,onDelete}){
       h(Swatches,{value:color,onPick:setColor}),
       h('button',{className:'btn amber',onClick:submitAdd},'Add')),
     keys.length===0 && !adding && h('p',{className:'muted',style:{fontSize:13}},'No competencies. Add one to start tagging entries.'),
-    ...keys.map(k=> editingKey===k
+    ...keys.map((k,i)=> editingKey===k
       ? h(CompEditRow,{key:k,name:k,data:competencies[k],
           onSave:(nn,dd,cc)=>{ if(onEdit(k,nn,dd,cc)) setEditingKey(null); },
           onCancel:()=>setEditingKey(null)})
-      : h('div',{className:'set-row',key:k},
+      : h('div',{className:'set-row'+(dragIdx===i?' dragging':'')+(overIdx===i&&dragIdx!==i?' dragover':''),key:k,
+          draggable:true,
+          onDragStart:e=>{ setDragIdx(i); e.dataTransfer.effectAllowed='move'; },
+          onDragOver:e=>{ e.preventDefault(); if(overIdx!==i) setOverIdx(i); },
+          onDrop:e=>{ e.preventDefault(); onDrop(); },
+          onDragEnd:()=>{ setDragIdx(null);setOverIdx(null); }},
+          h('span',{className:'set-grip','aria-hidden':'true'},'⠿'),
           h('span',{className:'set-dot',style:{background:competencies[k].c}}),
           h('div',{className:'set-row-main'},
             h('div',{className:'set-name'},k),
@@ -933,29 +965,38 @@ function Swatches({value,onPick}){
       style:{background:col},'aria-label':'colour '+col,onClick:()=>onPick(col)})));
 }
 
-function ListSection({title,desc,items,usage,onAdd,onEdit,onDelete}){
+function ListSection({title,desc,items,usage,onAdd,onEdit,onDelete,onReorder}){
   const [adding,setAdding]=useState(false);
   const [name,setName]=useState('');
   const [editingKey,setEditingKey]=useState(null);
   const [confirmDel,setConfirmDel]=useState(null);
+  const [dragIdx,setDragIdx]=useState(null);
+  const [overIdx,setOverIdx]=useState(null);
 
   function submitAdd(){ if(onAdd(name)){ setName('');setAdding(false); } }
+  function onDrop(){ if(dragIdx!=null&&overIdx!=null&&dragIdx!==overIdx) onReorder(dragIdx,overIdx); setDragIdx(null);setOverIdx(null); }
 
   return h('div',{className:'card set-card'},
     h('div',{className:'set-head'},
       h('div',null,
         h('h4',{className:'sec',style:{margin:0}},title),
-        h('p',{className:'set-desc'},desc)),
+        h('p',{className:'set-desc'},desc+' Drag to reorder.')),
       h('button',{className:'btn',onClick:()=>setAdding(a=>!a)}, adding?'Cancel':'+ Add')),
     adding && h('div',{className:'set-add'},
       h('input',{className:'set-in',placeholder:'Name',value:name,autoFocus:true,
         onChange:e=>setName(e.target.value),onKeyDown:e=>{if(e.key==='Enter')submitAdd();}}),
       h('button',{className:'btn amber',onClick:submitAdd},'Add')),
     items.length===0 && !adding && h('p',{className:'muted',style:{fontSize:13}},'None yet. Add one above.'),
-    ...items.map(k=> editingKey===k
+    ...items.map((k,i)=> editingKey===k
       ? h(ListEditRow,{key:k,name:k,
           onSave:nn=>{ if(onEdit(k,nn)) setEditingKey(null); },onCancel:()=>setEditingKey(null)})
-      : h('div',{className:'set-row',key:k},
+      : h('div',{className:'set-row'+(dragIdx===i?' dragging':'')+(overIdx===i&&dragIdx!==i?' dragover':''),key:k,
+          draggable:true,
+          onDragStart:e=>{ setDragIdx(i); e.dataTransfer.effectAllowed='move'; },
+          onDragOver:e=>{ e.preventDefault(); if(overIdx!==i) setOverIdx(i); },
+          onDrop:e=>{ e.preventDefault(); onDrop(); },
+          onDragEnd:()=>{ setDragIdx(null);setOverIdx(null); }},
+          h('span',{className:'set-grip','aria-hidden':'true'},'⠿'),
           h('div',{className:'set-row-main'},h('div',{className:'set-name'},k)),
           h('span',{className:'set-count'},(usage[k]||0)+' used'),
           h('button',{className:'set-act',onClick:()=>setEditingKey(k)},'Edit'),
