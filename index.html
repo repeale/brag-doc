@@ -115,15 +115,15 @@
   .jmonth::after{content:"";flex:1;height:1px;background:var(--line)}
   .jmonth-n{background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:1px 8px;color:var(--ink-dim);letter-spacing:0}
 
-  .entry{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;margin-bottom:12px;transition:.12s;cursor:pointer}
+  .entry{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;margin-bottom:14px;transition:.12s;cursor:pointer}
   .entry:hover{border-color:var(--ink-faint);transform:translateY(-1px)}
-  .entry .meta{display:flex;align-items:center;gap:10px;margin-bottom:7px;flex-wrap:wrap}
+  .entry .meta{display:flex;align-items:center;gap:10px;margin-bottom:9px;flex-wrap:wrap}
   .entry .date{font-family:var(--mono);font-size:11px;color:var(--ink-faint)}
-  .entry h3{margin:0 0 6px;font-size:15.5px;font-weight:600}
-  .entry p{margin:0;color:var(--ink-dim);font-size:13.5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-  .tag{font-family:var(--mono);font-size:10.5px;padding:2px 8px;border-radius:5px;font-weight:500}
-  .pill{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10.5px;color:var(--ink-dim);padding:2px 8px;border:1px solid var(--line);border-radius:5px}
-  .entry .foot{display:flex;gap:7px;margin-top:11px;flex-wrap:wrap;align-items:center}
+  .entry h3{margin:0 0 7px;font-size:16px;font-weight:600;letter-spacing:-.1px}
+  .entry p{margin:0;color:var(--ink-dim);font-size:13.5px;line-height:1.55;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .tag{font-family:var(--mono);font-size:10.5px;padding:3px 8px;border-radius:5px;font-weight:500}
+  .pill{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10.5px;color:var(--ink-dim);padding:3px 8px;border:1px solid var(--line);border-radius:5px}
+  .entry .foot{display:flex;gap:7px;margin-top:13px;flex-wrap:wrap;align-items:center}
 
   .empty{text-align:center;padding:70px 20px;color:var(--ink-faint)}
   .empty .big{font-size:34px;margin-bottom:10px;opacity:.5}
@@ -193,7 +193,7 @@
   /* ---- ratio chart headers (shared) ---- */
   .cb-head{display:flex;align-items:baseline;gap:12px;margin-bottom:8px;flex-wrap:wrap}
   .cb-sub{font-family:var(--mono);font-size:11px;color:var(--ink-faint)}
-  .cb-svg{display:block;width:100%;height:170px}
+  .cb-svg{display:block;width:100%;aspect-ratio:600/220;max-height:260px;min-height:150px}
   .cb-axis{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--ink-faint);margin-top:2px;padding:0 10px 0 30px}
   .cb-legend{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
   .cb-leg{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-family:var(--mono);color:var(--ink-dim);padding:4px 9px;border:1px solid var(--line);border-radius:7px;transition:.12s}
@@ -223,14 +223,21 @@
   /* ---- modal / editor ---- */
   .scrim{position:fixed;inset:0;background:rgba(6,7,10,.6);backdrop-filter:blur(3px);z-index:50;display:flex;justify-content:flex-end}
   .scrim.center{justify-content:center;align-items:center;padding:20px}
-  .dialog{width:min(440px,100%);background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;animation:slide .2s ease;max-height:90vh;overflow-y:auto}
-  .imp-opts{display:flex;flex-direction:column;gap:10px;margin-top:14px}
-  .imp-opt{text-align:left;background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:13px 15px;transition:.12s}
+  .dialog{width:min(460px,100%);background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;animation:slide .2s ease;max-height:90vh;display:flex;flex-direction:column}
+  .dlg-head{display:flex;align-items:center;gap:12px;padding:18px 22px;border-bottom:1px solid var(--line)}
+  .dlg-head h2{margin:0;font-size:16px;font-weight:600;flex:1}
+  .dlg-body{padding:20px 22px;overflow-y:auto}
+  .dlg-lead{margin:0 0 14px;font-size:14px;line-height:1.55}
+  .dlg-q{margin:0 0 4px;font-size:12.5px;color:var(--ink-faint);font-family:var(--mono);letter-spacing:.4px}
+  .dlg-err{color:var(--rose);margin:0 0 10px;font-size:14px;line-height:1.5}
+  .dlg-foot{display:flex;justify-content:flex-end;gap:10px;padding:14px 22px;border-top:1px solid var(--line)}
+  .imp-opts{display:flex;flex-direction:column;gap:10px;margin-top:10px}
+  .imp-opt{text-align:left;background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:14px 16px;transition:.12s}
   .imp-opt:hover{border-color:var(--amber)}
   .imp-opt.danger:hover{border-color:var(--rose)}
-  .imp-opt .io-t{font-weight:600;margin-bottom:3px}
+  .imp-opt .io-t{font-weight:600;margin-bottom:4px}
   .imp-opt.danger .io-t{color:var(--rose)}
-  .imp-opt .io-d{font-size:12.5px;color:var(--ink-dim)}
+  .imp-opt .io-d{font-size:12.5px;color:var(--ink-dim);line-height:1.5}
 
   /* ---- settings ---- */
   .settings{display:flex;flex-direction:column;gap:16px;max-width:860px;margin:0 auto}
@@ -777,33 +784,30 @@ function ImportModal({info,existingCount,onCancel,onConfirm}){
   const err = info.error;
   return h('div',{className:'scrim center',onClick:onCancel},
     h('div',{className:'dialog',onClick:e=>e.stopPropagation()},
-      h('div',{className:'dh',style:{borderBottom:'1px solid var(--line)'}},
-        h('h2',{style:{margin:0,fontSize:16}}, err?'Import failed':'Import entries'),
-        h('div',{style:{flex:1}}),
-        h('button',{className:'iconbtn',onClick:onCancel},'✕')),
-      h('div',{className:'db'},
+      h('div',{className:'dlg-head'},
+        h('h2',null, err?'Import failed':'Import entries'),
+        h('button',{className:'iconbtn',onClick:onCancel,'aria-label':'Close'},'✕')),
+      h('div',{className:'dlg-body'},
         err
           ? h('div',null,
-              h('p',{style:{color:'var(--rose)',marginTop:0}},err),
-              h('p',{className:'muted',style:{fontSize:13}},
-                'Pick a JSON file previously exported from Brag. Your current entries are untouched.'),
-              h('div',{style:{textAlign:'right',marginTop:18}},
-                h('button',{className:'btn',onClick:onCancel},'Close')))
+              h('p',{className:'dlg-err'},err),
+              h('p',{className:'muted',style:{fontSize:13,margin:0}},
+                'Pick a JSON file previously exported from BragDoc. Your current entries are untouched.'))
           : h('div',null,
-              h('p',{style:{marginTop:0}},
+              h('p',{className:'dlg-lead'},
                 'Found ',h('b',null,info.entries.length+' valid '+(info.entries.length===1?'entry':'entries')),
                 ' in that file. You currently have ',h('b',null,existingCount),'.'),
-              h('p',{className:'muted',style:{fontSize:13}},'How should they be added?'),
+              h('p',{className:'dlg-q'},'How should they be added?'),
               h('div',{className:'imp-opts'},
                 h('button',{className:'imp-opt',onClick:()=>onConfirm('merge')},
                   h('div',{className:'io-t'},'⤵ Merge'),
                   h('div',{className:'io-d'},'Keep your '+existingCount+' and add the new ones. Entries with the same id are updated.')),
                 h('button',{className:'imp-opt danger',onClick:()=>onConfirm('replace')},
                   h('div',{className:'io-t'},'⟲ Replace all'),
-                  h('div',{className:'io-d'},'Delete your current '+existingCount+' and keep only the imported '+info.entries.length+'.'))),
-              h('div',{style:{textAlign:'right',marginTop:16}},
-                h('button',{className:'btn ghost',onClick:onCancel},'Cancel')))
-      ))
+                  h('div',{className:'io-d'},'Delete your current '+existingCount+' and keep only the imported '+info.entries.length+'.'))))),
+      h('div',{className:'dlg-foot'},
+        h('button',{className:'btn ghost',onClick:onCancel},err?'Close':'Cancel'))
+    )
   );
 }
 
@@ -1288,7 +1292,7 @@ function ShareTrend({title,entries,cutoff,periodLabel,allKeys,keysOf,colorOf}){
 
   const firstFilled = shares.findIndex(s=>s!=null);
 
-  const W=600,H=170,PADL=30,PADR=10,PADT=10,PADB=8;
+  const W=600,H=220,PADL=30,PADR=10,PADT=12,PADB=12;
   const px = i => PADL + (model.BUCKETS<=1?0:i/(model.BUCKETS-1))*(W-PADL-PADR);
   const yTop = (H-PADB)-(H-PADT-PADB);
   const py = frac => (H-PADB) - frac*(H-PADT-PADB);
@@ -1322,7 +1326,7 @@ function ShareTrend({title,entries,cutoff,periodLabel,allKeys,keysOf,colorOf}){
     !anyData
       ? h('p',{className:'muted',style:{fontSize:13,margin:'8px 0 0'}},'No data in this period yet.')
       : h('div',{style:{position:'relative'}},
-          h('svg',{className:'cb-svg',style:{height:'170px'},viewBox:'0 0 '+W+' '+H,preserveAspectRatio:'none',role:'img',
+          h('svg',{className:'cb-svg',viewBox:'0 0 '+W+' '+H,preserveAspectRatio:'none',role:'img',
             'aria-label':title+' share over time',
             onMouseMove:onMove,onMouseLeave:()=>setHoverIdx(null)},
             ...ticks.map(t=>h('g',{key:t.label},
