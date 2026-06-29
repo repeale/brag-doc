@@ -442,10 +442,12 @@ const ConfigContext = React.createContext({
 const useConfig = () => React.useContext(ConfigContext);
 
 const uid = () => Math.random().toString(36).slice(2,10);
-const today = () => new Date().toISOString().slice(0,10);
+// All date strings are LOCAL calendar days (YYYY-MM-DD), matching <input type=date>
+// and the user's sense of "today". Using local components avoids UTC off-by-one bugs.
+const iso = d => { const z=new Date(d); z.setMinutes(z.getMinutes()-z.getTimezoneOffset()); return z.toISOString().slice(0,10); };
+const today = () => iso(new Date());
 const fmtDate = s => new Date(s+'T00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
-const weekAgo = n => { const d=new Date(); d.setDate(d.getDate()-n); return d.toISOString().slice(0,10); };
-const iso = d => d.toISOString().slice(0,10);
+const weekAgo = n => { const d=new Date(); d.setDate(d.getDate()-n); return iso(d); };
 
 // Time periods for the Impact map. cutoff() returns the inclusive start date (YYYY-MM-DD).
 const PERIODS = [
