@@ -171,21 +171,21 @@
   .hm-sub{font-family:var(--mono);font-size:11px;color:var(--ink-faint)}
   .hm-scroll{overflow-x:auto;padding-bottom:4px}
   .hm-grid{display:inline-block;min-width:max-content}
-  .hm-months{display:grid;grid-auto-flow:column;grid-template-columns:repeat(54,11px);gap:3px;margin-left:26px;height:14px;margin-bottom:2px}
-  .hm-month{font-family:var(--mono);font-size:10px;color:var(--ink-faint);grid-row:1}
-  .hm-body{display:flex;gap:3px}
+  .hm-months{display:grid;grid-template-columns:repeat(54,11px);grid-template-rows:14px;gap:3px;margin-left:26px;height:14px;margin-bottom:2px;overflow:hidden}
+  .hm-month{font-family:var(--mono);font-size:10px;color:var(--ink-faint);grid-row:1;white-space:nowrap}
+  .hm-body{display:flex;gap:3px;align-items:flex-start}
   .hm-days{display:flex;flex-direction:column;gap:3px;margin-right:5px;width:21px;flex-shrink:0}
   .hm-day{height:11px;font-family:var(--mono);font-size:9px;color:var(--ink-faint);line-height:11px;text-align:right}
-  .hm-week{display:flex;flex-direction:column;gap:3px}
-  .hm-cell{width:11px;height:11px;border-radius:2.5px;background:var(--panel-2)}
-  .hm-cell.empty{background:transparent}
+  .hm-week{display:flex;flex-direction:column;gap:3px;flex-shrink:0}
+  .hm-cell{width:11px;height:11px;border-radius:2.5px;background:var(--panel-2);flex-shrink:0}
+  .hm-cell.hm-blank{background:transparent}
   .hm-cell.lv0{background:var(--hm-empty)}
   .hm-cell.lv1{background:rgba(245,166,35,.30)}
   .hm-cell.lv2{background:rgba(245,166,35,.52)}
   .hm-cell.lv3{background:rgba(245,166,35,.76)}
   .hm-cell.lv4{background:var(--amber)}
-  .hm-cell:not(.empty){cursor:pointer}
-  .hm-cell:not(.empty):hover{outline:1.5px solid var(--ink);outline-offset:1px}
+  .hm-cell:not(.hm-blank){cursor:pointer}
+  .hm-cell:not(.hm-blank):hover{outline:1.5px solid var(--ink);outline-offset:1px}
   .hm-legend{display:flex;align-items:center;gap:4px;justify-content:flex-end;margin-top:10px;font-family:var(--mono);font-size:10px;color:var(--ink-faint)}
   .hm-legend .hm-cell{cursor:default}
   .hm-tip{position:fixed;transform:translate(-50%,-100%);background:var(--panel-2);border:1px solid var(--line);border-radius:7px;padding:6px 10px;font-size:11.5px;white-space:nowrap;z-index:80;pointer-events:none;box-shadow:0 6px 20px rgba(0,0,0,.4)}
@@ -1560,7 +1560,7 @@ function Heatmap({entries}){
                   onMouseEnter:e=>{ const r=e.target.getBoundingClientRect();
                     setHover({date:cell.date,count:cell.n,x:r.left+r.width/2,y:r.top}); },
                   onMouseLeave:()=>setHover(null)})
-              : h('div',{key:di,className:'hm-cell empty'})))))),
+              : h('div',{key:di,className:'hm-cell hm-blank'})))))),
     ),
     h('div',{className:'hm-legend'},
       h('span',null,'Less'),
